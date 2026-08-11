@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>台股槓桿防禦系統 — Leveraged ETF & Futures Defense Dashboard</title>
+
+<!-- ============ CDN 資源 ============ -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/vue@3.4.27/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
+
+<script>
+/* Tailwind 主題設定：TradingView 式深色金融配色（台股慣例：紅漲綠跌） */
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        base:   '#0B0F17',   // 頁面底色
+        panel:  '#141A24',   // 卡片
+        panel2: '#1B2230',   // 卡片內層
+        line:   '#252D3D',   // 邊框
+        up:     '#F6465D',   // 紅漲（台股慣例）
+        dn:     '#2EBD85',   // 綠跌
+        warn:   '#F5B942',
+        info:   '#4C8DFF',
+        ink:    '#E6EAF2',
+        mut:    '#8A94A6'
+      },
+      fontFamily: {
+        tc:   ['"Noto Sans TC"', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace']
+      }
+    }
+  }
+}
+</script>
+
+<style>
+  body { background:#0B0F17; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:#252D3D; border-radius:4px; }
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; }
+  .num { font-family:'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
+  .glow-red   { box-shadow:0 0 24px rgba(246,70,93,.25); }
+  .glow-amber { box-shadow:0 0 24px rgba(245,185,66,.20); }
+  .glow-green { box-shadow:0 0 24px rgba(46,189,133,.20); }
+  .fade-enter-active,.fade-leave-active{transition:opacity .2s}
+  .fade-enter-from,.fade-leave-to{opacity:0}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+</style>
+</head>
+
+<body class="font-tc text-ink min-h-screen">
+<div id="app" class="max-w-7xl mx-auto px-3 sm:px-6 pb-16">
+
+  <!-- ================= 頂部標題列 ================= -->
+  <header class="flex items-center justify-between py-4 border-b border-line sticky top-0 bg-base/95 backdrop-blur z-40">
+    <div>
+      <h1 class="text-lg sm:text-xl font-black tracking-wide">台股槓桿防禦系統
+        <span class="text-mut font-mono text-xs align-middle hidden sm:inline">LEV-DEFENSE v1.0</span>
+      </h1>
+      <p class="text-[11px] text-mut">00631L 正二 × 微台指 TMF ｜ 動態錨點回檔戰術引擎</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button @click="showSettings=true" title="系統設定"
+        class="w-9 h-9 rounded-lg bg-panel border border-line hover:border-info flex items-center justify-center text-mut hover:text-ink transition">⚙️</button>
+    </div>
+  </header>
+
+  <!-- ================= 全域戰報橫幅 ================= -->
+  <transition name="fade">
+  <div v-if="vTurnAlert" class="mt-4 rounded-xl border border-up bg-up/10 glow-red p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+    <div class="text-2xl">🏁</div>
+    <div class="flex-1">
+      <div class="font-black text-up">V 轉止盈戰報 — 微台指已回升至歷史高點</div>
+      <div class="text-sm text-mut">目前微台浮動損益 <b class="num text-ink">{{ fmt(microPnL) }}</b>，建議全數平倉止盈，純現金獲利轉回預備金。</div>
+    </div>
+    <button @click="executeVTurn" class="px-4 py-2 rounded-lg bg-up text-white font-bold hover:opacity-90">執行全數平倉</button>
+  </div>
+  </transition>
+
+  <transition name="fade">
+  <div v-if="vaultAlert" class="mt-4 rounded-xl border border-warn bg-warn/10 glow-amber p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+    <div class="text-2xl">🏦</div>
+    <div class="flex-1">
+      <div class="font-black text-warn">金庫重置提示 — 總資產已達初始資本 2 倍</div>
+      <div class="text-sm text-mut">目前總資產 <b class="num text-ink">{{ fmt(totalAssets) }}</b> ≥ {{ fmt(st.settings.initCapital*2) }}。建議單向頂部獲利抽離，補齊 30% 現金預備金。</div>
+    </div>
+    <button @click="st.dismissedVault=true" class="px-4 py-2 rounded-lg border border-warn text-warn font-bold hover:bg-warn/20">我知道了</button>
+  </div>
+  </transition>
+
+  <!-- ================= 模組 1：頂部控制與即時燈號 ================= -->
+  <section class="mt-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- 點位輸入 -->
+    <div class="lg:col-span-4 rounded-xl bg-panel border border-line p-4">
+      <div class="text-xs text-mut mb-2 font-bold tracking-widest">大盤點位輸入 INDEX</div>
+      <div class="flex gap-2">
+        <input v-model.number="inputIndex" type="number" min="1" placeholder="輸入加權指數"
+          class="num flex-1 min-w-0 bg-panel2 border border-line rounded-lg px-3 py-2 text-xl font-bold focus:border-info outline-none">
+        <button @click="applyIndex" class="px-4 rounded-lg bg-info text-white font-bold hover:opacity-90 whitespace-nowrap">套用</button>
+      </div>
+      <div class="mt-3 flex items-center justify-between text-sm">
+        <span class="text-mut">目前點位</span>
+        <span class="num font-bold text-lg">{{ st.current.toLocaleString() }}</span>
+      </div>
+      <div class="mt-1 flex items-center justify-between text-sm">
+        <span class="text-mut">歷史最高點 ATH <span class="text-[10px]">(自動鎖定)</span></span>
+        <span class="flex items-center gap-2">
+          <span class="num font-bold text-lg text-warn">{{ st.ath.toLocaleString() }}</span>
+          <button @click="editATH" class="text-[11px] px-2 py-0.5 rounded border border-line text-mut hover:text-ink hover:border-info">修正</button>
+          <button @click="resetATH" class="text-[11px] px-2 py-0.5 rounded border border-line text-mut hover:text-ink hover:border-warn">重置</button>
+        </span>
+      </div>
+    </div>
+
+    <!-- 回檔大字 + 燈號 -->
+    <div class="lg:col-span-5 rounded-xl bg-panel border border-line p-4 flex flex-col justify-between"
+         :class="{'glow-green':light==='green','glow-amber':light==='yellow','glow-red':light==='red'}">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="text-xs text-mut font-bold tracking-widest">自高點回檔 DRAWDOWN Δ%</div>
+          <div class="num font-extrabold leading-none mt-1"
+               :class="delta < 0 ? 'text-dn' : 'text-up'"
+               style="font-size:clamp(2.6rem,6vw,4rem)">
+            {{ delta >= 0 ? '+' : '' }}{{ delta.toFixed(2) }}<span class="text-2xl">%</span>
+          </div>
+        </div>
+        <div class="text-right">
+          <div class="text-3xl">{{ lightEmoji }}</div>
+          <div class="text-xs font-bold mt-1" :class="lightTextClass">{{ lightLabel }}</div>
+        </div>
+      </div>
+
+      <!-- 簽名元素：回檔軌道尺 (0% → -40%)，標出四道戰術觸發線 -->
+      <div class="mt-4">
+        <div class="relative h-3 rounded-full bg-panel2 overflow-visible"
+             style="background:linear-gradient(90deg,#2EBD8533 0%,#F5B94233 30%,#F6465D33 62%,#F6465D66 100%)">
+          <!-- 觸發線 -->
+          <div v-for="m in railMarks" :key="m.d"
+               class="absolute top-[-4px] h-[20px] w-[2px]" :style="{left: railPos(m.d)+'%', background:m.color}"
+               :title="m.label"></div>
+          <!-- 目前位置 -->
+          <div class="absolute top-[-7px] w-0 h-0 transition-all duration-300"
+               :style="{left:'calc('+railPos(Math.min(0,delta))+'% - 6px)'}"
+               style="border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid #E6EAF2"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-mut mt-1 num">
+          <span>0%</span><span class="text-warn">-12%</span><span class="text-warn">-24%</span><span class="text-up">-25%</span><span class="text-up">-35%</span><span>-40%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 今日行動指引 -->
+    <div class="lg:col-span-3 rounded-xl bg-panel border border-line p-4">
+      <div class="text-xs text-mut font-bold tracking-widest mb-2">今日行動指引 TODAY</div>
+      <ul class="space-y-2 text-sm">
+        <li v-for="(g,i) in guidance" :key="i" class="flex gap-2">
+          <span>{{ g.icon }}</span><span :class="g.cls">{{ g.text }}</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= 模組 2：戰術執行指示器 ================= -->
+  <section class="mt-4">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-black tracking-wide">戰術執行指示器 <span class="text-mut text-xs font-mono">TACTICAL ACTION ENGINE</span></h2>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div v-for="a in tacticalCards" :key="a.key"
+           class="rounded-xl border p-4 bg-panel transition"
+           :class="a.state==='ready' ? 'border-up glow-red' : (a.state==='done' ? 'border-dn/60' : 'border-line')">
+        <div class="flex items-center justify-between">
+          <div class="font-bold">{{ a.title }}</div>
+          <span class="text-[11px] px-2 py-0.5 rounded-full font-bold"
+                :class="a.state==='ready' ? 'bg-up text-white' : (a.state==='done' ? 'bg-dn/20 text-dn' : 'bg-panel2 text-mut')">
+            {{ a.state==='ready' ? '可執行' : (a.state==='done' ? '已執行' : '未達標') }}
+          </span>
+        </div>
+        <div class="text-xs text-mut mt-2 leading-relaxed">{{ a.desc }}</div>
+        <div class="text-[11px] text-mut mt-1 num">觸發：Δ% ≤ {{ a.threshold }}%</div>
+        <button v-if="a.state==='ready'" @click="a.exec()"
+                :disabled="!a.affordable"
+                class="mt-3 w-full py-1.5 rounded-lg font-bold text-sm"
+                :class="a.affordable ? 'bg-up text-white hover:opacity-90' : 'bg-panel2 text-mut cursor-not-allowed'">
+          {{ a.affordable ? '執行' : '資金不足' }}
+        </button>
+        <div v-else-if="a.state==='done'" class="mt-3 text-center text-dn text-sm font-bold">✓ 完成</div>
+        <div v-else class="mt-3 text-center text-mut text-sm">待命中</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 模組 3：資金結構與風險監控 ================= -->
+  <section class="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- 資金明細 -->
+    <div class="lg:col-span-5 rounded-xl bg-panel border border-line p-4">
+      <h2 class="font-black tracking-wide mb-3">資金結構 <span class="text-mut text-xs font-mono">CAPITAL MONITOR</span></h2>
+      <div class="space-y-2 text-sm">
+        <div class="flex justify-between border-b border-line/60 pb-2">
+          <span class="text-mut">正二 00631L 市值（估算）</span><span class="num font-bold">{{ fmt(etfMV) }}</span>
+        </div>
+        <div class="flex justify-between border-b border-line/60 pb-2">
+          <span class="text-mut">美股流動資產剩餘</span><span class="num font-bold">{{ fmt(st.ledger.us) }}</span>
+        </div>
+        <div class="flex justify-between border-b border-line/60 pb-2">
+          <span class="text-mut">現金剩餘</span><span class="num font-bold">{{ fmt(st.ledger.cash) }}</span>
+        </div>
+        <div class="flex justify-between border-b border-line/60 pb-2">
+          <span class="text-mut">期貨專戶總額（含浮動損益）</span><span class="num font-bold">{{ fmt(futEquity) }}</span>
+        </div>
+        <div class="flex justify-between pt-1">
+          <span class="font-bold">當前總資產</span>
+          <span class="num font-extrabold text-lg">{{ fmt(totalAssets) }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="font-bold">總損益</span>
+          <span class="num font-extrabold text-lg" :class="totalPnLPct>=0?'text-up':'text-dn'">
+            {{ totalPnLPct>=0?'+':'' }}{{ totalPnLPct.toFixed(2) }}%
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 環形圖 -->
+    <div class="lg:col-span-3 rounded-xl bg-panel border border-line p-4">
+      <div class="text-xs text-mut font-bold tracking-widest mb-2">資產配置比例</div>
+      <div class="relative h-56"><canvas id="allocChart"></canvas></div>
+    </div>
+
+    <!-- 微台風險計數器 -->
+    <div class="lg:col-span-4 rounded-xl bg-panel border p-4"
+         :class="microLots>0 ? (maintClass.border) : 'border-line'">
+      <h2 class="font-black tracking-wide mb-3">微台風險計數器 <span class="text-mut text-xs font-mono">TMF RISK</span></h2>
+      <template v-if="microLots>0">
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div class="bg-panel2 rounded-lg p-3">
+            <div class="text-mut text-xs">持倉口數</div>
+            <div class="num font-extrabold text-xl">{{ microLots }} 口</div>
+          </div>
+          <div class="bg-panel2 rounded-lg p-3">
+            <div class="text-mut text-xs">微台浮動損益</div>
+            <div class="num font-extrabold text-xl" :class="microPnL>=0?'text-up':'text-dn'">{{ fmt(microPnL) }}</div>
+          </div>
+          <div class="bg-panel2 rounded-lg p-3 col-span-2">
+            <div class="flex justify-between items-end">
+              <div>
+                <div class="text-mut text-xs">帳戶維持率（原始保證金 {{ fmt(st.settings.maintBase) }}/口）</div>
+                <div class="num font-extrabold text-2xl" :class="maintClass.text">{{ maintRate.toFixed(0) }}%</div>
+              </div>
+              <div class="text-xs font-bold" :class="maintClass.text">{{ maintClass.label }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 space-y-1 text-xs text-mut">
+          <div v-for="(m,i) in st.micro" :key="i" class="flex justify-between num">
+            <span>第 {{ i+1 }} 口 ｜ 建倉點 {{ Math.round(m.entryIndex).toLocaleString() }}</span>
+            <span :class="(st.current-m.entryIndex)>=0?'text-up':'text-dn'">{{ fmt((st.current-m.entryIndex)*10*m.lots) }}</span>
+          </div>
+        </div>
+      </template>
+      <div v-else class="text-mut text-sm h-40 flex items-center justify-center text-center">
+        目前無微台持倉。<br>當回檔 ≤ -25% 時將啟動第一道扣板機。
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 模組 4：歷史劇本與情境模擬器 ================= -->
+  <section class="mt-6 rounded-xl bg-panel border border-line p-4">
+    <h2 class="font-black tracking-wide mb-1">歷史劇本與情境模擬器 <span class="text-mut text-xs font-mono">SCENARIO SANDBOX</span></h2>
+    <p class="text-xs text-mut mb-3">沙盒模擬不會影響上方實盤狀態。以目前 ATH {{ st.ath.toLocaleString() }} 為基準點推演。</p>
+    <div class="flex flex-wrap gap-2">
+      <button v-for="s in scenarioDefs" :key="s.key" @click="runScenario(s)"
+        class="px-4 py-2 rounded-lg border font-bold text-sm transition"
+        :class="activeScenario===s.key ? 'bg-info text-white border-info' : 'bg-panel2 border-line text-ink hover:border-info'">
+        {{ s.label }}
+      </button>
+    </div>
+
+    <div v-if="simResult" class="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <!-- 對比卡片 -->
+      <div class="lg:col-span-4 space-y-3">
+        <div class="rounded-xl bg-panel2 border border-info/50 p-4">
+          <div class="text-xs text-mut font-bold">🛡️ 防禦系統最終資產</div>
+          <div class="num font-extrabold text-2xl mt-1">{{ fmt(simResult.finalDef) }}</div>
+          <div class="num text-sm font-bold" :class="simResult.defPct>=0?'text-up':'text-dn'">
+            {{ simResult.defPct>=0?'+':'' }}{{ simResult.defPct.toFixed(2) }}%
+          </div>
+        </div>
+        <div class="rounded-xl bg-panel2 border border-line p-4">
+          <div class="text-xs text-mut font-bold">🚀 滿倉正二對照組</div>
+          <div class="num font-extrabold text-2xl mt-1">{{ fmt(simResult.finalFull) }}</div>
+          <div class="num text-sm font-bold" :class="simResult.fullPct>=0?'text-up':'text-dn'">
+            {{ simResult.fullPct>=0?'+':'' }}{{ simResult.fullPct.toFixed(2) }}%
+          </div>
+        </div>
+        <div class="rounded-xl p-4 border"
+             :class="simResult.finalDef>=simResult.finalFull ? 'border-dn bg-dn/10' : 'border-warn bg-warn/10'">
+          <div class="text-xs font-bold" :class="simResult.finalDef>=simResult.finalFull ? 'text-dn' : 'text-warn'">
+            {{ simResult.finalDef>=simResult.finalFull ? '✅ 防禦系統勝出' : '⚠️ 滿倉正二勝出' }}
+          </div>
+          <div class="num font-bold mt-1">差額 {{ fmt(Math.abs(simResult.finalDef-simResult.finalFull)) }}</div>
+        </div>
+        <!-- 戰報 -->
+        <div class="rounded-xl bg-panel2 border border-line p-3 max-h-44 overflow-y-auto">
+          <div class="text-xs text-mut font-bold mb-1">📜 模擬戰報</div>
+          <div v-for="(e,i) in simResult.events" :key="i" class="text-xs text-mut py-0.5 border-b border-line/40 last:border-0">{{ e }}</div>
+          <div v-if="!simResult.events.length" class="text-xs text-mut">此路徑未觸發任何戰術動作。</div>
+        </div>
+      </div>
+      <!-- 曲線圖 -->
+      <div class="lg:col-span-8 rounded-xl bg-panel2 border border-line p-3">
+        <div class="text-xs text-mut font-bold mb-2">資產曲線對比（防禦系統 vs 滿倉正二）</div>
+        <div class="relative h-72 sm:h-80"><canvas id="simChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 系統設定 Modal ================= -->
+  <transition name="fade">
+  <div v-if="showSettings" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @click.self="showSettings=false">
+    <div class="w-full max-w-md rounded-2xl bg-panel border border-line p-5 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-black">⚙️ 系統設定</h3>
+        <button @click="showSettings=false" class="text-mut hover:text-ink">✕</button>
+      </div>
+      <div class="space-y-3 text-sm">
+        <label class="block" v-for="f in settingFields" :key="f.key">
+          <span class="text-mut text-xs">{{ f.label }}</span>
+          <input v-model.number="draft[f.key]" type="number"
+            class="num mt-1 w-full bg-panel2 border border-line rounded-lg px-3 py-2 focus:border-info outline-none">
+        </label>
+      </div>
+      <div class="mt-5 space-y-2">
+        <button @click="saveSettings(false)" class="w-full py-2 rounded-lg bg-info text-white font-bold hover:opacity-90">儲存參數（保留目前部位）</button>
+        <button @click="saveSettings(true)" class="w-full py-2 rounded-lg border border-up text-up font-bold hover:bg-up/10">儲存並重置整個系統</button>
+        <p class="text-[11px] text-mut">「重置」會依新參數重新初始化所有部位、帳本與執行狀態，並清除 LocalStorage 紀錄。</p>
+      </div>
+    </div>
+  </div>
+  </transition>
+
+  <footer class="mt-8 text-center text-[11px] text-mut">
+    正二估算為近似模型（下跌 ×1.85 / 上漲 ×2.25），非實際淨值；本工具僅供個人資金紀律管理，不構成投資建議。
+  </footer>
+</div>
+
+<script>
+/* =====================================================================
+ *  台股槓桿防禦系統 — 核心邏輯
+ *  模型說明：
+ *   - ATH 動態錨點：套用點位時自動 ATH = max(ATH, 點位)
+ *   - Δ% = (現價 - ATH) / ATH × 100
+ *   - 正二估算因子 F(Δ) = 1 + (Δ<0 ? Δ×1.85 : Δ×2.25)/100
+ *   - 以「單位淨值」uATH 追蹤正二：ATH 上移時 uATH ×= 1 + 漲幅×2.25，
+ *     回檔期間單位淨值 = uATH × F(Δ)。每筆買入以當下單位淨值換算 units，
+ *     使不同回檔深度的加碼部位能正確累計損益。
+ * ===================================================================== */
+const { createApp, reactive, ref, computed, watch, onMounted, nextTick } = Vue;
+
+const LS_KEY = 'levDefenseDashboard_v1';
+
+const DEFAULT_SETTINGS = {
+  initCapital: 2100000,   // 總初始資本
+  etfAlloc:    1400000,   // 正二初始配額
+  usInit:       250000,   // 美股流動資產
+  cashInit:     450000,   // 現金
+  tmfMargin:    200000,   // 微台每口劃撥保證金
+  maintBase:     28000    // 每口原始保證金（維持率分母）
+};
+
+/* 正二估算因子 */
+function F(deltaPct){
+  return 1 + (deltaPct < 0 ? deltaPct * 1.85 : deltaPct * 2.25) / 100;
+}
+
+function freshState(settings){
+  const s = { ...settings };
+  return {
+    settings: s,
+    ath: 23000,
+    current: 23000,
+    uATH: 1,
+    /* 初始正二部位視為在 ATH（Δ=0）建立 */
+    etfPositions: [{ units: s.etfAlloc, label: '初始配置', amount: s.etfAlloc }],
+    micro: [],                                  // {entryIndex, lots}
+    ledger: { us: s.usInit, cash: s.cashInit, futDeposit: 0 },
+    actions: { buy1:'pending', buy2:'pending', tmf1:'pending', tmf2:'pending' },
+    dismissedVault: false
+  };
+}
+
+createApp({
+  setup(){
+    /* ---------- 狀態載入（LocalStorage） ---------- */
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch(e){ saved = null; }
+    const st = reactive(saved && saved.settings ? saved : freshState(DEFAULT_SETTINGS));
+
+    const inputIndex   = ref(st.current);
+    const showSettings = ref(false);
+    const draft        = reactive({ ...st.settings });
+    const activeScenario = ref(null);
+    const simResult    = ref(null);
+
+    /* ---------- 自動儲存 ---------- */
+    let saveTimer = null;
+    watch(st, () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => localStorage.setItem(LS_KEY, JSON.stringify(st)), 300);
+    }, { deep: true });
+
+    /* ---------- 基礎計算 ---------- */
+    /* 四捨五入至 6 位小數，避免浮點誤差（如 -11.999999999%）漏觸發 -12% 門檻 */
+    const round6 = v => Math.round(v * 1e6) / 1e6;
+    const delta = computed(() => round6((st.current - st.ath) / st.ath * 100));
+    const unitNow = computed(() => st.uATH * F(Math.min(0, delta.value)));  // 現價=ATH 時 Δ=0
+
+    const etfMV = computed(() =>
+      st.etfPositions.reduce((a,p) => a + p.units, 0) * unitNow.value
+    );
+    const microLots = computed(() => st.micro.reduce((a,m)=>a+m.lots,0));
+    const microPnL  = computed(() => st.micro.reduce((a,m)=>a+(st.current-m.entryIndex)*10*m.lots,0));
+    const futEquity = computed(() => st.ledger.futDeposit + microPnL.value);
+    const totalAssets = computed(() => etfMV.value + st.ledger.us + st.ledger.cash + futEquity.value);
+    const totalPnLPct = computed(() => (totalAssets.value - st.settings.initCapital) / st.settings.initCapital * 100);
+
+    /* 維持率 = 期貨權益 / (原始保證金 × 口數) */
+    const maintRate = computed(() =>
+      microLots.value === 0 ? 0 : futEquity.value / (st.settings.maintBase * microLots.value) * 100
+    );
+    const maintClass = computed(() => {
+      const r = maintRate.value;
+      if (r > 500) return { text:'text-dn',   border:'border-dn glow-green',  label:'✔ 安全（>500%）' };
+      if (r > 300) return { text:'text-warn', border:'border-warn glow-amber',label:'△ 注意（300–500%）' };
+      return             { text:'text-up',   border:'border-up glow-red',    label:'✖ 危險（<300%）需補保證金' };
+    });
+
+    /* ---------- 燈號 ---------- */
+    const light = computed(() => {
+      if (delta.value <= -25) return 'red';
+      if (delta.value <= -12) return 'yellow';
+      return 'green';
+    });
+    const lightEmoji = computed(() => ({green:'🟢',yellow:'🟡',red:'🔴'})[light.value]);
+    const lightLabel = computed(() => ({green:'常態牛市',yellow:'預警回檔',red:'極端防守'})[light.value]);
+    const lightTextClass = computed(() => ({green:'text-dn',yellow:'text-warn',red:'text-up'})[light.value]);
+
+    /* 回檔軌道尺：0% ~ -40% 映射為 0~100% 寬度 */
+    const railPos = d => Math.min(100, Math.max(0, (-d) / 40 * 100));
+    const railMarks = [
+      { d:-12, color:'#F5B942', label:'正二補倉 1' },
+      { d:-24, color:'#F5B942', label:'正二補倉 2' },
+      { d:-25, color:'#F6465D', label:'微台扣板機 1' },
+      { d:-35, color:'#F6465D', label:'微台扣板機 2' }
+    ];
+
+    /* ---------- 戰術動作 ---------- */
+    function pushETF(amount, label){
+      st.etfPositions.push({ units: amount / unitNow.value, label, amount });
+    }
+    function stateOf(key, threshold){
+      if (st.actions[key] === 'done') return 'done';
+      return delta.value <= threshold ? 'ready' : 'pending';
+    }
+    const tacticalCards = computed(() => [
+      {
+        key:'buy1', title:'正二補倉 1', threshold:-12,
+        desc:'動用預備金 NT$ 200,000 買入正二 00631L。',
+        state: stateOf('buy1',-12),
+        affordable: st.ledger.cash >= 200000,
+        exec(){ st.ledger.cash -= 200000; pushETF(200000,'補倉1'); st.actions.buy1='done'; }
+      },
+      {
+        key:'buy2', title:'正二補倉 2', threshold:-24,
+        desc:'變現美股 NT$ 250,000 + 現金 NT$ 50,000 買入正二。',
+        state: stateOf('buy2',-24),
+        affordable: st.ledger.us >= 250000 && st.ledger.cash >= 50000,
+        exec(){ st.ledger.us -= 250000; st.ledger.cash -= 50000; pushETF(300000,'補倉2'); st.actions.buy2='done'; }
+      },
+      {
+        key:'tmf1', title:'微台扣板機 1', threshold:-25,
+        desc:`建倉 1 口微台指多單，建倉點 ATH×0.75 ≈ ${Math.round(st.ath*0.75).toLocaleString()}，劃撥保證金 NT$ ${st.settings.tmfMargin.toLocaleString()}。`,
+        state: stateOf('tmf1',-25),
+        affordable: st.ledger.cash >= st.settings.tmfMargin,
+        exec(){
+          st.ledger.cash -= st.settings.tmfMargin;
+          st.ledger.futDeposit += st.settings.tmfMargin;
+          st.micro.push({ entryIndex: st.ath*0.75, lots:1 });
+          st.actions.tmf1='done';
+        }
+      },
+      {
+        key:'tmf2', title:'微台扣板機 2', threshold:-35,
+        desc:`再建倉 1 口微台指，建倉點 ATH×0.65 ≈ ${Math.round(st.ath*0.65).toLocaleString()}，再劃撥保證金 NT$ ${st.settings.tmfMargin.toLocaleString()}。`,
+        state: stateOf('tmf2',-35),
+        affordable: st.ledger.cash >= st.settings.tmfMargin,
+        exec(){
+          st.ledger.cash -= st.settings.tmfMargin;
+          st.ledger.futDeposit += st.settings.tmfMargin;
+          st.micro.push({ entryIndex: st.ath*0.65, lots:1 });
+          st.actions.tmf2='done';
+        }
+      }
+    ]);
+
+    /* ---------- 全域戰報 ---------- */
+    const vTurnAlert = computed(() => microLots.value > 0 && st.current >= st.ath);
+    const vaultAlert = computed(() => totalAssets.value >= st.settings.initCapital*2 && !st.dismissedVault);
+
+    function executeVTurn(){
+      st.ledger.cash += futEquity.value;    // 純現金獲利轉回預備金
+      st.ledger.futDeposit = 0;
+      st.micro = [];
+      st.actions.tmf1 = 'pending';          // 重啟下一輪扣板機
+      st.actions.tmf2 = 'pending';
+    }
+
+    /* ---------- 今日行動指引 ---------- */
+    const guidance = computed(() => {
+      const g = [];
+      const d = delta.value;
+      if (vTurnAlert.value){
+        g.push({icon:'🏁', cls:'text-up font-bold', text:'微台已回本壘：全數平倉止盈，獲利轉回現金。'});
+      }
+      if (light.value==='green'){
+        g.push({icon:'✅', cls:'', text:'常態牛市：持有正二不動，不加碼、不動用預備金。'});
+        g.push({icon:'🚫', cls:'text-mut', text:'不該做：追高加碼、動用微台保證金。'});
+      } else if (light.value==='yellow'){
+        if (st.actions.buy1!=='done') g.push({icon:'⚡', cls:'text-warn font-bold', text:'補倉 1 條件已達：動用 20 萬預備金買正二。'});
+        if (d<=-24 && st.actions.buy2!=='done') g.push({icon:'⚡', cls:'text-warn font-bold', text:'補倉 2 條件已達：變現美股 25 萬 + 現金 5 萬買正二。'});
+        g.push({icon:'🚫', cls:'text-mut', text:'不該做：恐慌賣出正二、提前建微台倉。'});
+      } else {
+        if (st.actions.tmf1!=='done') g.push({icon:'🔴', cls:'text-up font-bold', text:'極端防守：執行微台扣板機 1（ATH×0.75 建倉）。'});
+        if (d<=-35 && st.actions.tmf2!=='done') g.push({icon:'🔴', cls:'text-up font-bold', text:'扣板機 2 已達標：再建 1 口（ATH×0.65）。'});
+        g.push({icon:'🛡️', cls:'', text:'該做：只按劇本執行，保持維持率 > 500%。'});
+        g.push({icon:'🚫', cls:'text-mut', text:'不該做：情緒性砍掉正二、超額加開微台口數。'});
+      }
+      if (vaultAlert.value) g.push({icon:'🏦', cls:'text-warn font-bold', text:'總資產已翻倍：頂部抽離獲利，補齊 30% 現金。'});
+      return g;
+    });
+
+    /* ---------- 點位 / ATH 操作 ---------- */
+    function applyIndex(){
+      const v = Number(inputIndex.value);
+      if (!v || v <= 0) return;
+      if (v > st.ath){
+        st.uATH *= 1 + (v - st.ath)/st.ath * 2.25;   // ATH 上移：以上漲係數推進單位淨值
+        st.ath = v;
+      }
+      st.current = v;
+    }
+    function editATH(){
+      const v = Number(prompt('手動修正 ATH（歷史最高點）', st.ath));
+      if (!v || v <= 0) return;
+      /* 保持單位淨值連續：修正錨點但不跳動目前市值 */
+      const uNow = st.uATH * F(Math.min(0,(st.current-st.ath)/st.ath*100));
+      st.ath = v;
+      const dNew = Math.min(0,(st.current-st.ath)/st.ath*100);
+      st.uATH = uNow / F(dNew);
+      if (st.current > st.ath) st.ath = st.current;
+    }
+    function resetATH(){
+      if (!confirm('將 ATH 重置為目前點位？')) return;
+      const uNow = st.uATH * F(Math.min(0,(st.current-st.ath)/st.ath*100));
+      st.ath = st.current;
+      st.uATH = uNow;
+    }
+
+    /* ---------- 系統設定 ---------- */
+    const settingFields = [
+      { key:'initCapital', label:'總初始資本 NT$' },
+      { key:'etfAlloc',    label:'正二 00631L 初始配額 NT$' },
+      { key:'usInit',      label:'美股流動資產 NT$' },
+      { key:'cashInit',    label:'現金 NT$' },
+      { key:'tmfMargin',   label:'微台每口劃撥保證金 NT$' },
+      { key:'maintBase',   label:'微台每口原始保證金（維持率分母）NT$' }
+    ];
+    function saveSettings(reset){
+      Object.assign(st.settings, draft);
+      if (reset){
+        localStorage.removeItem(LS_KEY);
+        Object.assign(st, freshState({ ...draft }));
+        inputIndex.value = st.current;
+        simResult.value = null; activeScenario.value = null;
+      }
+      showSettings.value = false;
+    }
+
+    /* ---------- 情境模擬器（純函數，不動實盤狀態） ---------- */
+    const scenarioDefs = [
+      { key:'bull',  label:'🐂 單邊牛市 +50%',
+        path:[1,1.1,1.2,1.3,1.4,1.5] },
+      { key:'crash', label:'📉 常態股災 -30% + V轉',
+        path:[1,.94,.88,.82,.76,.75,.70,.78,.86,.94,1.0] },
+      { key:'flash', label:'⚡ 極端閃崩 -50% + V轉',
+        path:[1,.88,.76,.75,.68,.65,.58,.50,.62,.75,.88,1.0] },
+      { key:'updown',label:'🎢 先漲 +30% 再回檔 -30%',
+        path:[1,1.1,1.2,1.3,1.3*.94,1.3*.88,1.3*.76,1.3*.75,1.3*.70] }
+    ];
+
+    function simulate(pathFractions){
+      const s = st.settings;
+      const base = st.ath;
+      let ath = base, uA = 1;
+      let cash = s.cashInit, us = s.usInit, fut = 0;
+      let positions = [{ units: s.etfAlloc }];
+      let micro = [];
+      const acts = { buy1:false, buy2:false, tmf1:false, tmf2:false };
+      const fullUnits = s.initCapital;   // 滿倉正二對照組（同一單位淨值路徑）
+      const events = [], labels = [], defCurve = [], fullCurve = [];
+
+      pathFractions.forEach((f, step) => {
+        const idx = base * f;
+        if (idx > ath){ uA *= 1 + (idx-ath)/ath*2.25; ath = idx; }
+        const d = round6((idx - ath)/ath*100);
+        const u = uA * F(Math.min(0,d));
+
+        /* 觸發戰術（依現金水位判斷可否執行） */
+        if (d <= -12 && !acts.buy1){
+          if (cash >= 200000){ cash -= 200000; positions.push({units:200000/u}); acts.buy1 = true;
+            events.push(`Δ ${d.toFixed(1)}%｜補倉1：現金 20 萬 → 正二（${Math.round(idx).toLocaleString()}）`); }
+        }
+        if (d <= -24 && !acts.buy2){
+          if (us >= 250000 && cash >= 50000){ us -= 250000; cash -= 50000; positions.push({units:300000/u}); acts.buy2 = true;
+            events.push(`Δ ${d.toFixed(1)}%｜補倉2：美股 25 萬 + 現金 5 萬 → 正二`); }
+        }
+        if (d <= -25 && !acts.tmf1){
+          if (cash >= s.tmfMargin){ cash -= s.tmfMargin; fut += s.tmfMargin;
+            micro.push({ e: ath*0.75 }); acts.tmf1 = true;
+            events.push(`Δ ${d.toFixed(1)}%｜微台第1口建倉 @ ${Math.round(ath*0.75).toLocaleString()}`); }
+          else if (!acts.warn1){ acts.warn1 = true;
+            events.push(`Δ ${d.toFixed(1)}%｜⚠️ 現金不足，微台第1口未建`); }
+        }
+        if (d <= -35 && !acts.tmf2){
+          if (cash >= s.tmfMargin){ cash -= s.tmfMargin; fut += s.tmfMargin;
+            micro.push({ e: ath*0.65 }); acts.tmf2 = true;
+            events.push(`Δ ${d.toFixed(1)}%｜微台第2口建倉 @ ${Math.round(ath*0.65).toLocaleString()}`); }
+          else if (!acts.warn2){ acts.warn2 = true;
+            events.push(`Δ ${d.toFixed(1)}%｜⚠️ 現金不足，微台第2口未建（預備金已耗盡）`); }
+        }
+
+        /* V 轉止盈：持倉且回到 ATH */
+        let pnl = micro.reduce((a,m)=>a+(idx-m.e)*10,0);
+        if (micro.length && idx >= ath){
+          events.push(`Δ 0.0%｜🏁 V轉止盈：微台全平，獲利 ${Math.round(pnl).toLocaleString()} 轉回現金`);
+          cash += fut + pnl; fut = 0; micro = []; pnl = 0;
+          acts.tmf1 = false; acts.tmf2 = false;
+          acts.warn1 = false; acts.warn2 = false;
+        }
+
+        const totalDef = positions.reduce((a,p)=>a+p.units,0)*u + cash + us + fut + pnl;
+        labels.push(`${((f-1)*100).toFixed(0)}%`);
+        defCurve.push(Math.round(totalDef));
+        fullCurve.push(Math.round(fullUnits * u));
+      });
+
+      const finalDef = defCurve[defCurve.length-1];
+      const finalFull = fullCurve[fullCurve.length-1];
+      return {
+        finalDef, finalFull, events, labels, defCurve, fullCurve,
+        defPct:  (finalDef  - s.initCapital)/s.initCapital*100,
+        fullPct: (finalFull - s.initCapital)/s.initCapital*100
+      };
+    }
+
+    function runScenario(s){
+      activeScenario.value = s.key;
+      simResult.value = simulate(s.path);
+      nextTick(drawSimChart);
+    }
+
+    /* ---------- Chart.js ---------- */
+    let allocChart = null, simChart = null;
+    const chartFont = { family:'"JetBrains Mono","Noto Sans TC",monospace', size:11 };
+
+    function drawAllocChart(){
+      const ctx = document.getElementById('allocChart');
+      if (!ctx) return;
+      const data = [
+        Math.max(0, etfMV.value),
+        Math.max(0, st.ledger.us),
+        Math.max(0, st.ledger.cash),
+        Math.max(0, futEquity.value)
+      ];
+      if (allocChart){
+        allocChart.data.datasets[0].data = data;
+        allocChart.update();
+        return;
+      }
+      allocChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['正二 00631L','美股','現金','期貨保證金'],
+          datasets: [{
+            data,
+            backgroundColor: ['#F6465D','#4C8DFF','#2EBD85','#F5B942'],
+            borderColor: '#141A24', borderWidth: 3
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, cutout: '62%',
+          plugins: {
+            legend: { position:'bottom', labels:{ color:'#8A94A6', font:chartFont, boxWidth:10 } },
+            tooltip: { callbacks: { label: c => ` ${c.label}: NT$ ${Math.round(c.raw).toLocaleString()}` } }
+          }
+        }
+      });
+    }
+
+    function drawSimChart(){
+      const ctx = document.getElementById('simChart');
+      if (!ctx || !simResult.value) return;
+      if (simChart) simChart.destroy();
+      const r = simResult.value;
+      simChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: r.labels,
+          datasets: [
+            { label:'🛡️ 防禦系統', data:r.defCurve, borderColor:'#4C8DFF',
+              backgroundColor:'rgba(76,141,255,.12)', fill:true, tension:.3, pointRadius:3 },
+            { label:'🚀 滿倉正二', data:r.fullCurve, borderColor:'#8A94A6',
+              borderDash:[6,4], fill:false, tension:.3, pointRadius:3 }
+          ]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          scales: {
+            x: { title:{display:true,text:'大盤相對起點漲跌',color:'#8A94A6',font:chartFont},
+                 ticks:{color:'#8A94A6',font:chartFont}, grid:{color:'#252D3D55'} },
+            y: { ticks:{color:'#8A94A6',font:chartFont, callback:v=>(v/10000).toFixed(0)+'萬'}, grid:{color:'#252D3D55'} }
+          },
+          plugins: {
+            legend: { labels:{color:'#E6EAF2',font:chartFont} },
+            tooltip: { callbacks:{ label:c=>` ${c.dataset.label}: NT$ ${c.raw.toLocaleString()}` } }
+          }
+        }
+      });
+    }
+
+    watch([etfMV, futEquity, () => st.ledger.us, () => st.ledger.cash], () => drawAllocChart());
+    onMounted(() => { drawAllocChart(); });
+
+    /* ---------- 工具 ---------- */
+    const fmt = v => 'NT$ ' + Math.round(v).toLocaleString();
+
+    return {
+      st, inputIndex, showSettings, draft, settingFields,
+      delta, etfMV, microLots, microPnL, futEquity, totalAssets, totalPnLPct,
+      maintRate, maintClass,
+      light, lightEmoji, lightLabel, lightTextClass, railPos, railMarks,
+      tacticalCards, vTurnAlert, vaultAlert, executeVTurn, guidance,
+      applyIndex, editATH, resetATH, saveSettings,
+      scenarioDefs, runScenario, simResult, activeScenario,
+      fmt
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
