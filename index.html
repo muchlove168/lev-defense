@@ -18,20 +18,20 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        base:   '#00302e',   // 頁面底色（比背景更深，用於輸入框凹陷感）
-        panel:  '#004643e6', // 面板
-        card:   '#013c39',   // 卡片
-        line:   '#0a5651',   // 邊框
+        base:   '#0a3529',   // 頁面底色（比背景更深，用於輸入框凹陷感）
+        panel:  '#0f4c3ae6', // 面板
+        card:   '#124434',   // 卡片
+        line:   '#1d5e49',   // 邊框
         ink:    '#fffffe',   // 主文字（標題白）
-        mute:   '#abd1c6',   // 次要文字（綠灰）
-        up:     '#7bc47f',   // 多方 / 安全（柔和綠，與底色區隔）
+        mute:   '#a8cbbc',   // 次要文字（松綠灰）
+        up:     '#7bc47f',   // 多方 / 安全（柔和綠）
         upsoft: '#7bc47f22',
-        dn:     '#e16162',   // 空方 / 危險（Happy Hues tertiary 紅）
+        dn:     '#e16162',   // 空方 / 危險（紅）
         dnsoft: '#e1616222',
-        warn:   '#f9bc60',   // 預警 / 高亮（Happy Hues button 暖黃）
+        warn:   '#f9bc60',   // 預警 / 高亮（暖黃）
         warnsoft:'#f9bc601f',
-        blue:   '#5b8fd6',   // 個股藍（調柔和以融入綠色系）
-        hlbg:   '#004643',   // 頁面主背景
+        blue:   '#5b8fd6',   // 個股藍
+        hlbg:   '#0f4c3a',   // 頁面主背景（藍海松茶）
       },
       fontFamily: {
         sans: ['"Noto Sans TC"', 'system-ui', 'sans-serif'],
@@ -43,15 +43,15 @@ tailwind.config = {
 </script>
 
 <style>
-  html { scrollbar-color:#0a5651 #003633; }
+  html { scrollbar-color:#1d5e49 #0a3529; }
   body { background:
-      radial-gradient(1200px 500px at 80% -10%, #0a565155, transparent),
-      radial-gradient(900px 400px at -10% 110%, #01302e55, transparent),
-      #004643;
+      radial-gradient(1200px 500px at 80% -10%, #1d5e4955, transparent),
+      radial-gradient(900px 400px at -10% 110%, #0a352955, transparent),
+      #0f4c3a;
   }
   ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#0a5651; border-radius:6px; }
-  ::-webkit-scrollbar-track { background:#003633; }
+  ::-webkit-scrollbar-thumb { background:#1d5e49; border-radius:6px; }
+  ::-webkit-scrollbar-track { background:#0a3529; }
 
   /* 招牌元素：Δ% 巨型讀數的呼吸光暈 */
   .dd-glow-green { text-shadow:0 0 24px #7bc47f66; }
@@ -94,7 +94,7 @@ tailwind.config = {
 
       <!-- 控制列：點位輸入 / ATH / Δ% -->
       <div class="mt-3">
-        <!-- 大盤現價 ＋ 歷史高點 ATH ＋ 自高點回檔 Δ%（三合一，純自動更新） -->
+        <!-- 大盤即時行情（三數字左集中）＋ 今天開盤指引（右） -->
         <div class="bg-card border rounded-xl px-4 py-3" :class="light.borderCls">
           <div class="flex items-center justify-between mb-2 gap-2">
             <div class="text-[11px] text-mute font-bold tracking-widest">大盤即時行情</div>
@@ -105,34 +105,48 @@ tailwind.config = {
             </button>
           </div>
 
-          <div class="grid grid-cols-3 gap-4 items-center">
-            <!-- 大盤現價 -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- 左：三數字（緊湊往左集中） -->
             <div>
-              <div class="text-[11px] text-mute font-bold tracking-widest mb-0.5">大盤現價（加權指數）</div>
-              <div class="num text-3xl font-extrabold text-ink leading-tight">{{ fmt(idx) }}</div>
-              <button @click="fetchNow" :disabled="feed.busy"
-                      class="mt-1 text-[10px] px-2 py-0.5 rounded border border-line text-mute hover:border-up/60 transition inline-flex items-center gap-1">
-                <span :class="feed.busy ? 'inline-block animate-spin' : ''">↻</span> 立即更新
-              </button>
-            </div>
-            <!-- 歷史最高點 -->
-            <div>
-              <div class="text-[11px] text-mute font-bold tracking-widest mb-0.5">歷史最高點 ATH</div>
-              <div class="num text-3xl font-extrabold text-ink leading-tight">{{ fmt(ath) }}</div>
-              <div class="text-[10px] text-mute mt-1">距 <span class="num font-bold" :class="dd<0?'text-dn':'text-up'">{{ fmt(idx - ath) }}</span> 點</div>
-            </div>
-            <!-- 自高點回檔 -->
-            <div class="text-right">
-              <div class="text-[11px] text-mute font-bold tracking-widest mb-0.5">自高點回檔 Δ%</div>
-              <div class="num text-4xl font-extrabold leading-tight" :class="[light.textCls, light.glowCls]">
-                {{ dd >= 0 ? '+' : '' }}{{ dd.toFixed(2) }}<span class="text-xl">%</span>
+              <div class="flex items-end gap-6">
+                <div>
+                  <div class="text-[10px] text-mute font-bold tracking-widest mb-0.5">大盤現價</div>
+                  <div class="num text-2xl font-extrabold text-ink leading-none">{{ fmt(idx) }}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-mute font-bold tracking-widest mb-0.5">歷史高點</div>
+                  <div class="num text-2xl font-extrabold text-ink leading-none">{{ fmt(ath) }}</div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-mute font-bold tracking-widest mb-0.5">回檔 Δ%</div>
+                  <div class="num text-2xl font-extrabold leading-none" :class="[light.textCls, light.glowCls]">
+                    {{ dd >= 0 ? '+' : '' }}{{ dd.toFixed(2) }}<span class="text-sm">%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                <button @click="fetchNow" :disabled="feed.busy"
+                        class="text-[10px] px-2 py-0.5 rounded border border-line text-mute hover:border-up/60 transition inline-flex items-center gap-1">
+                  <span :class="feed.busy ? 'inline-block animate-spin' : ''">↻</span> 立即更新
+                </button>
+                <span class="text-[10px] text-mute">距 <span class="num font-bold" :class="dd<0?'text-dn':'text-up'">{{ fmt(idx - ath) }}</span> 點</span>
+              </div>
+              <div class="mt-2 pt-2 border-t border-line text-[10px] leading-4 flex items-center gap-1.5">
+                <span :class="feed.ok===true ? 'text-up' : feed.ok===false ? 'text-dn' : 'text-mute'">●</span>
+                <span class="text-mute">{{ feed.msg }}</span>
               </div>
             </div>
-          </div>
 
-          <div class="mt-2 pt-2 border-t border-line text-[10px] leading-4 flex items-center gap-1.5">
-            <span :class="feed.ok===true ? 'text-up' : feed.ok===false ? 'text-dn' : 'text-mute'">●</span>
-            <span class="text-mute">{{ feed.msg }}</span>
+            <!-- 右：今天開盤該做 / 不該做 -->
+            <div class="lg:border-l lg:border-line lg:pl-4">
+              <div class="text-[11px] text-mute font-bold tracking-widest mb-1.5">🧭 今天開盤：該做 / 不該做</div>
+              <div class="space-y-1">
+                <div v-for="(a,i) in todayActions.do" :key="'d'+i"
+                     class="text-xs leading-5 rounded-lg bg-upsoft border border-up/30 px-2.5 py-1.5">✅ {{ a }}</div>
+                <div v-for="(a,i) in todayActions.dont" :key="'n'+i"
+                     class="text-xs leading-5 rounded-lg bg-dnsoft border border-dn/30 px-2.5 py-1.5">🚫 {{ a }}</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -208,17 +222,6 @@ tailwind.config = {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-
-        <!-- 今日行動指引 -->
-        <div class="bg-card border border-line rounded-2xl p-4">
-          <h2 class="font-black tracking-wide mb-3">🧭 今天開盤：該做 / 不該做</h2>
-          <div class="space-y-2">
-            <div v-for="(a,i) in todayActions.do" :key="'d'+i"
-                 class="text-sm leading-6 rounded-lg bg-upsoft border border-up/30 px-3 py-2">✅ {{ a }}</div>
-            <div v-for="(a,i) in todayActions.dont" :key="'n'+i"
-                 class="text-sm leading-6 rounded-lg bg-dnsoft border border-dn/30 px-3 py-2">🚫 {{ a }}</div>
           </div>
         </div>
       </section>
@@ -615,8 +618,8 @@ const LS_KEY = 'lfdd_v1';
 
 const DEFAULT_CFG = {
   totalCapital: 2100000,   // 總初始資本（現金部位 = 這個 − 所有持倉成本 − 微台保證金，自動算）
-  l2Shares:       37000,   // 正二 (00631L) 股數（預設值，請至設定改為你的真實持倉）
-  l2CostPrice:      37.5,   // 正二每股成本價（NT$，00631L 分割後價位約 37 元；請改為你的真實成本）
+  l2Shares:       38000,   // 正二 (00631L) 股數（真實持倉）
+  l2CostPrice:    36.29,   // 正二每股成本價（NT$，真實成本）
   tmfMargin:     200000,   // 微台每口「劃撥」保證金
   pointValue:        10,   // 微台每點價值
   maintMarginPerLot: 28000,// 每口原始/維持保證金估算基準
@@ -676,12 +679,20 @@ createApp({
       const saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
       if (saved && saved.cfg) {
         Object.assign(S.cfg, { ...DEFAULT_CFG, ...saved.cfg });
+        /* 若存檔為 legacy amount 格式（舊版），正二股數/成本價強制採用新的真實預設值 */
+        const isLegacy = (saved.tranches || []).some(t => t.shares == null);
+        if (isLegacy) { S.cfg.l2Shares = DEFAULT_CFG.l2Shares; S.cfg.l2CostPrice = DEFAULT_CFG.l2CostPrice; }
         Object.assign(S.cfgDraft, S.cfg);
         S.ath = saved.ath; S.idx = saved.idx; S.idxInput = String(saved.idx);
-        /* 舊資料遷移：把 legacy 的 amount 格式正二持倉，轉成 shares 格式（以設定的成本價回推股數） */
+        /* 舊資料遷移：legacy amount 格式轉 shares 格式。
+           「初始配置」直接採用設定的真實股數/成本價（避免回推產生錯誤股數）；
+           補倉類 tranche 才用成本價回推股數。 */
         S.tranches = (saved.tranches || []).map(t => {
           if (t.shares != null) return t;
           const cp = S.cfg.l2CostPrice > 0 ? S.cfg.l2CostPrice : 1;
+          if (t.label === '初始配置') {
+            return { id: t.id || 1, label: '初始配置', shares: S.cfg.l2Shares, costPrice: S.cfg.l2CostPrice, entryDelta: t.entryDelta || 0 };
+          }
           return { id: t.id || Date.now(), label: t.label, shares: Math.round((t.amount || 0) / cp), costPrice: cp, entryDelta: t.entryDelta || 0 };
         });
         S.tmf = saved.tmf;
@@ -1184,7 +1195,7 @@ createApp({
     let allocChart = null, scenChart = null;
     Chart.defaults.color = '#abd1c6';
     Chart.defaults.font.family = '"JetBrains Mono","Noto Sans TC",monospace';
-    Chart.defaults.borderColor = '#0a5651';
+    Chart.defaults.borderColor = '#1d5e49';
 
     function drawAllocChart() {
       const ctx = document.getElementById('allocChart');
@@ -1196,7 +1207,7 @@ createApp({
           datasets: [{
             data: allocData(),
             backgroundColor: ['#7bc47f', '#5b8fd6', '#abd1c6', '#f9bc60'],
-            borderColor: '#013c39', borderWidth: 3, hoverOffset: 6
+            borderColor: '#124434', borderWidth: 3, hoverOffset: 6
           }]
         },
         options: {
