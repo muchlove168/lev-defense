@@ -123,20 +123,14 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- ATH -->
+        <!-- ATH（完全自動：跟隨即時行情追蹤，不提供手動輸入） -->
         <div class="bg-card border border-line rounded-xl px-4 py-3">
           <div class="flex items-center justify-between mb-1.5">
-            <div class="text-[11px] text-mute font-bold tracking-widest">歷史最高點 ATH（自動鎖定牛市高點）</div>
-            <div class="flex gap-1">
-              <button @click="athEditing=!athEditing" class="text-[11px] px-2 py-0.5 rounded border border-line text-mute hover:text-ink transition">修正</button>
-              <button @click="resetAthToIndex" class="text-[11px] px-2 py-0.5 rounded border border-line text-mute hover:text-ink transition">以現價重置</button>
-            </div>
+            <div class="text-[11px] text-mute font-bold tracking-widest">歷史最高點 ATH（自動追蹤大盤歷史高點）</div>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-line text-mute">🔒 自動，不可手動輸入</span>
           </div>
-          <div v-if="!athEditing" class="num text-2xl font-extrabold text-ink">{{ fmt(ath) }}</div>
-          <div v-else class="flex gap-2">
-            <input v-model.number="athDraft" type="number" class="num w-full bg-base border border-warn/60 rounded-lg px-3 py-1.5 text-lg focus:outline-none">
-            <button @click="saveAth" class="px-3 rounded-lg bg-warn text-base font-bold text-[#3a2c00]">確認</button>
-          </div>
+          <div class="num text-2xl font-extrabold text-ink">{{ fmt(ath) }}</div>
+          <div class="text-[10px] text-mute mt-1">今日盤中高點 {{ todayHigh ? fmt(todayHigh) : '—' }}</div>
         </div>
 
         <!-- Δ% 巨型讀數（招牌元素） -->
@@ -264,30 +258,18 @@ tailwind.config = {
               <div class="text-[11px] num" :class="l2Ret>=0?'text-up':'text-dn'">{{ l2Ret>=0?'+':'' }}{{ l2Ret.toFixed(2) }}% · {{ fmt(l2SharesTotal) }} 股</div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
-              <div class="text-[11px] text-mute font-bold">美股策略準備金</div>
-              <div class="num font-extrabold text-lg">{{ fmtNT(us) }}</div>
-              <div class="text-[11px] text-mute">板機專用，非個股</div>
-            </div>
-            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
               <div class="text-[11px] text-mute font-bold flex items-center gap-1">
-                個股市值（台股）
-                <span class="text-[9px] px-1 rounded" :class="stocks.length && stocks.every(s=>s.ok) ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ stocks.length?'即時':'—' }}</span>
+                個股市值（台股＋美股）
+                <span class="text-[9px] px-1 rounded" :class="(stocks.length||usStocks.length) ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ (stocks.length||usStocks.length) ? '即時' : '—' }}</span>
               </div>
-              <div class="num font-extrabold text-lg">{{ fmtNT(stocksValue) }}</div>
-              <div class="text-[11px] num" :class="stocksRet>=0?'text-up':'text-dn'">{{ stocks.length ? (stocksRet>=0?'+':'')+stocksRet.toFixed(2)+'%' : '尚未新增' }}</div>
-            </div>
-            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
-              <div class="text-[11px] text-mute font-bold flex items-center gap-1">
-                個股市值（美股·換算台幣）
-                <span class="text-[9px] px-1 rounded" :class="fx.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ fx.ok ? '匯率即時' : '匯率估算' }}</span>
-              </div>
-              <div class="num font-extrabold text-lg">{{ fmtNT(usStocksValueTWD) }}</div>
-              <div class="text-[11px] num" :class="usStocksRet>=0?'text-up':'text-dn'">
-                {{ usStocks.length ? (usStocksRet>=0?'+':'')+usStocksRet.toFixed(2)+'%' : '尚未新增' }} · USD/TWD {{ fx.rate ? fx.rate.toFixed(3) : '—' }}
+              <div class="num font-extrabold text-lg">{{ fmtNT(stocksValue + usStocksValueTWD) }}</div>
+              <div class="text-[11px] num" :class="combinedStocksRet>=0?'text-up':'text-dn'">
+                {{ (stocks.length||usStocks.length) ? (combinedStocksRet>=0?'+':'')+combinedStocksRet.toFixed(2)+'%' : '尚未新增' }}
+                <span class="text-mute">· 台股{{ fmtNT(stocksValue) }} 美股{{ fmtNT(usStocksValueTWD) }}</span>
               </div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
-              <div class="text-[11px] text-mute font-bold">現金預備金</div>
+              <div class="text-[11px] text-mute font-bold">現金部位</div>
               <div class="num font-extrabold text-lg">{{ fmtNT(cash) }}</div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
@@ -381,13 +363,22 @@ tailwind.config = {
         </div>
         <div v-else class="text-xs text-mute py-3 text-center">尚未新增台股個股持倉</div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <input v-model.trim="newStock.ticker" placeholder="代號 如2330" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          <input v-model.trim="newStock.name" placeholder="名稱（選填）" class="bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          <input v-model.number="newStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          <input v-model.number="newStock.costPrice" type="number" placeholder="成本價" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+        <button v-if="!addingStock" @click="addingStock=true"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
+          ＋ 新增台股持倉
+        </button>
+        <div v-else class="space-y-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <input v-model.trim="newStock.ticker" placeholder="代號 如2330" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.trim="newStock.name" placeholder="名稱（選填）" class="bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newStock.costPrice" type="number" placeholder="成本價" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+          </div>
+          <div class="flex gap-2">
+            <button @click="addStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">確認新增</button>
+            <button @click="addingStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
+          </div>
         </div>
-        <button @click="addStock" class="mt-2 w-full text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">+ 新增持倉</button>
       </div>
 
       <!-- 美股個股持倉 -->
@@ -418,12 +409,21 @@ tailwind.config = {
         </div>
         <div v-else class="text-xs text-mute py-3 text-center">尚未新增美股個股持倉</div>
 
-        <div class="grid grid-cols-3 sm:grid-cols-3 gap-2">
-          <input v-model.trim="newUsStock.ticker" placeholder="代號 如AAPL" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          <input v-model.number="newUsStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          <input v-model.number="newUsStock.costUSD" type="number" placeholder="成本(美元)" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+        <button v-if="!addingUsStock" @click="addingUsStock=true"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
+          ＋ 新增美股持倉
+        </button>
+        <div v-else class="space-y-2">
+          <div class="grid grid-cols-3 sm:grid-cols-3 gap-2">
+            <input v-model.trim="newUsStock.ticker" placeholder="代號 如AAPL" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newUsStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newUsStock.costUSD" type="number" placeholder="成本(美元)" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+          </div>
+          <div class="flex gap-2">
+            <button @click="addUsStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">確認新增</button>
+            <button @click="addingUsStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
+          </div>
         </div>
-        <button @click="addUsStock" class="mt-2 w-full text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">+ 新增持倉</button>
       </div>
     </section>
 
@@ -504,15 +504,8 @@ tailwind.config = {
         <div class="text-[11px] text-mute -mt-1">
           成本總額約 {{ fmtNT((cfgDraft.l2Shares||0) * (cfgDraft.l2CostPrice||0)) }}（僅套用於「依設定重置帳本」，不影響目前持倉）
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="space-y-1">
-            <span class="text-[11px] text-mute font-bold">美股策略準備金 (NT$，非個股)</span>
-            <input v-model.number="cfgDraft.usInitial" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
-          </label>
-          <label class="space-y-1">
-            <span class="text-[11px] text-mute font-bold">現金預備金 (NT$)</span>
-            <input v-model.number="cfgDraft.cashInitial" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
-          </label>
+        <div class="text-[11px] text-mute -mt-1 leading-5">
+          現金部位不需填寫，系統自動計算：<b class="text-ink">總初始資本 − 正二成本 − 個股成本 − 微台保證金</b>。
         </div>
         <div class="grid grid-cols-2 gap-3">
           <label class="space-y-1">
@@ -568,11 +561,9 @@ const { createApp, reactive, toRefs, computed, watch, onMounted, nextTick } = Vu
 const LS_KEY = 'lfdd_v1';
 
 const DEFAULT_CFG = {
-  totalCapital: 2100000,   // 總初始資本
+  totalCapital: 2100000,   // 總初始資本（現金部位 = 這個 − 所有持倉成本 − 微台保證金，自動算）
   l2Shares:        6300,   // 正二 (00631L) 股數
   l2CostPrice:   222.22,   // 正二每股成本價（NT$）
-  usInitial:     250000,   // 美股策略準備金（板機專用，非個股持倉）
-  cashInitial:   450000,   // 現金預備金
   tmfMargin:     200000,   // 微台每口「劃撥」保證金
   pointValue:        10,   // 微台每點價值
   maintMarginPerLot: 28000,// 每口原始/維持保證金估算基準
@@ -594,11 +585,10 @@ createApp({
       ath: 24000,
       idx: 24000,
       idxInput: '24000',
-      athEditing: false,
-      athDraft: 24000,
+      todayHigh: 0,                // 今日盤中最高（來自即時行情，僅顯示參考用）
       settingsOpen: false,
-      us: DEFAULT_CFG.usInitial,
-      cash: DEFAULT_CFG.cashInitial,
+      /* 現金部位不再手動輸入，改由 computed cash 自動算：總資本 − 各持倉成本 − 微台保證金 + 已實現損益 */
+      realizedPnl: 0,              // 微台平倉時的已實現損益累積（V轉全平時入帳）
       /* 正二各筆持倉：shares+costPrice 為主（新制）；legacy amount+entryDelta 為即時價不可用時的估算備援 */
       tranches: [{ id: 1, label: '初始配置', shares: DEFAULT_CFG.l2Shares, costPrice: DEFAULT_CFG.l2CostPrice, entryDelta: 0 }],
       /* 微台持倉：entry = 建倉點位，margin = 劃撥保證金 */
@@ -614,9 +604,11 @@ createApp({
       l2: { price: 0, ok: false },
       /* 台股個股持倉：{id, ticker, name, shares, costPrice, livePrice, ok} */
       stocks: [],
+      addingStock: false,
       newStock: { ticker: '', name: '', shares: null, costPrice: null },
       /* 美股個股持倉：{id, ticker, shares, costUSD, livePriceUSD, ok} */
       usStocks: [],
+      addingUsStock: false,
       newUsStock: { ticker: '', shares: null, costUSD: null },
       /* 即時美元兌台幣匯率 */
       fx: { rate: 31.5, ok: false }
@@ -629,9 +621,8 @@ createApp({
         Object.assign(S.cfg, { ...DEFAULT_CFG, ...saved.cfg });
         Object.assign(S.cfgDraft, S.cfg);
         S.ath = saved.ath; S.idx = saved.idx; S.idxInput = String(saved.idx);
-        S.athDraft = saved.ath;
-        S.us = saved.us; S.cash = saved.cash;
         S.tranches = saved.tranches; S.tmf = saved.tmf;
+        if (typeof saved.realizedPnl === 'number') S.realizedPnl = saved.realizedPnl;
         Object.assign(S.flags, saved.flags);
         if (typeof saved.auto === 'boolean') S.auto = saved.auto;
         if (saved.athMode) { S.athMode = saved.athMode; S.athModeDraft = saved.athMode; }
@@ -676,6 +667,7 @@ createApp({
       S.stocks.push({ id: Date.now(), ticker: t, name: (S.newStock.name || '').trim(),
         shares: S.newStock.shares, costPrice: S.newStock.costPrice, livePrice: S.newStock.costPrice, ok: false });
       S.newStock = { ticker: '', name: '', shares: null, costPrice: null };
+      S.addingStock = false;
       if (S.auto) fetchQuote();  // 立即嘗試抓一次新股價
     }
     function removeStock(id) { S.stocks = S.stocks.filter(s => s.id !== id); }
@@ -693,6 +685,7 @@ createApp({
       S.usStocks.push({ id: Date.now(), ticker: t, shares: S.newUsStock.shares,
         costUSD: S.newUsStock.costUSD, livePriceUSD: S.newUsStock.costUSD, ok: false });
       S.newUsStock = { ticker: '', shares: null, costUSD: null };
+      S.addingUsStock = false;
       if (S.auto) fetchQuote();
     }
     function removeUsStock(id) { S.usStocks = S.usStocks.filter(s => s.id !== id); }
@@ -705,7 +698,15 @@ createApp({
       S.tmf.length ? futuresEquity.value / (S.cfg.maintMarginPerLot * S.tmf.length) * 100 : 0
     );
 
-    const totalAsset  = computed(() => l2Value.value + stocksValue.value + usStocksValueTWD.value + S.us + S.cash + futuresEquity.value);
+    const combinedStocksCost = computed(() => stocksCost.value + usStocksCostTWD.value);
+    const combinedStocksRet  = computed(() => combinedStocksCost.value ? ((stocksValue.value + usStocksValueTWD.value) / combinedStocksCost.value - 1) * 100 : 0);
+
+    /* 現金部位：不手動輸入，完全自動計算 = 總資本 − 正二成本 − 個股成本(台+美) − 微台已劃撥保證金 + 微台已實現損益 */
+    const cash = computed(() =>
+      S.cfg.totalCapital - l2Cost.value - stocksCost.value - usStocksCostTWD.value - tmfMarginTotal.value + S.realizedPnl
+    );
+
+    const totalAsset  = computed(() => l2Value.value + stocksValue.value + usStocksValueTWD.value + cash.value + futuresEquity.value);
     const totalPnlPct = computed(() => (totalAsset.value / S.cfg.totalCapital - 1) * 100);
 
     const vTurnReady     = computed(() => S.tmf.length > 0 && S.idx >= S.ath - 1e-6);
@@ -730,35 +731,35 @@ createApp({
       return [
         {
           key: 'buy1', title: '正二補倉 1', threshold: -12, triggerPx: S.ath * 0.88,
-          desc: `動用現金預備金 ${fmtNT(200000)} 買入正二。`,
+          desc: `動用現金部位 ${fmtNT(200000)} 買入正二。`,
           state: mkState(d <= -12, S.flags.buy1),
-          blocked: (!S.flags.buy1 && d <= -12 && S.cash < 200000) ? '現金不足 NT$ 200,000' : '',
-          exec() { S.cash -= 200000; addL2Buy('補倉1', 200000, d); S.flags.buy1 = true; },
-          undo() { S.cash += 200000; S.tranches = S.tranches.filter(t => t.label !== '補倉1'); S.flags.buy1 = false; }
+          blocked: (!S.flags.buy1 && d <= -12 && cash.value < 200000) ? '現金不足 NT$ 200,000' : '',
+          exec() { addL2Buy('補倉1', 200000, d); S.flags.buy1 = true; },
+          undo() { S.tranches = S.tranches.filter(t => t.label !== '補倉1'); S.flags.buy1 = false; }
         },
         {
           key: 'buy2', title: '正二補倉 2', threshold: -24, triggerPx: S.ath * 0.76,
-          desc: `變現美股 ${fmtNT(250000)} + 現金 ${fmtNT(50000)}，合計 ${fmtNT(300000)} 買入正二。`,
+          desc: `動用現金部位 ${fmtNT(300000)} 買入正二。`,
           state: mkState(d <= -24, S.flags.buy2),
-          blocked: (!S.flags.buy2 && d <= -24 && (S.us < 250000 || S.cash < 50000)) ? '美股或現金餘額不足' : '',
-          exec() { S.us -= 250000; S.cash -= 50000; addL2Buy('補倉2', 300000, d); S.flags.buy2 = true; },
-          undo() { S.us += 250000; S.cash += 50000; S.tranches = S.tranches.filter(t => t.label !== '補倉2'); S.flags.buy2 = false; }
+          blocked: (!S.flags.buy2 && d <= -24 && cash.value < 300000) ? '現金不足 NT$ 300,000' : '',
+          exec() { addL2Buy('補倉2', 300000, d); S.flags.buy2 = true; },
+          undo() { S.tranches = S.tranches.filter(t => t.label !== '補倉2'); S.flags.buy2 = false; }
         },
         {
           key: 'tmf1', title: '微台第 1 扣板機', threshold: -25, triggerPx: S.ath * 0.75,
           desc: `建倉 1 口微台指多單 @ ${fmt(S.ath * 0.75)}（ATH×0.75），劃撥保證金 ${fmtNT(c.tmfMargin)}。`,
           state: mkState(d <= -25, S.flags.tmf1),
-          blocked: (!S.flags.tmf1 && d <= -25 && S.cash < c.tmfMargin) ? `現金不足 ${fmtNT(c.tmfMargin)}` : '',
-          exec() { S.cash -= c.tmfMargin; S.tmf.push({ id: Date.now(), tag: 'tmf1', entry: S.ath * 0.75, margin: c.tmfMargin }); S.flags.tmf1 = true; },
-          undo() { const L = S.tmf.find(x => x.tag === 'tmf1'); if (L) { S.cash += L.margin; S.tmf = S.tmf.filter(x => x !== L); } S.flags.tmf1 = false; }
+          blocked: (!S.flags.tmf1 && d <= -25 && cash.value < c.tmfMargin) ? `現金不足 ${fmtNT(c.tmfMargin)}` : '',
+          exec() { S.tmf.push({ id: Date.now(), tag: 'tmf1', entry: S.ath * 0.75, margin: c.tmfMargin }); S.flags.tmf1 = true; },
+          undo() { S.tmf = S.tmf.filter(x => x.tag !== 'tmf1'); S.flags.tmf1 = false; }
         },
         {
           key: 'tmf2', title: '微台第 2 扣板機', threshold: -35, triggerPx: S.ath * 0.65,
           desc: `再建倉 1 口微台指多單 @ ${fmt(S.ath * 0.65)}（ATH×0.65），再劃撥保證金 ${fmtNT(c.tmfMargin)}。`,
           state: mkState(d <= -35, S.flags.tmf2),
-          blocked: (!S.flags.tmf2 && d <= -35 && S.cash < c.tmfMargin) ? `現金不足 ${fmtNT(c.tmfMargin)}` : '',
-          exec() { S.cash -= c.tmfMargin; S.tmf.push({ id: Date.now(), tag: 'tmf2', entry: S.ath * 0.65, margin: c.tmfMargin }); S.flags.tmf2 = true; },
-          undo() { const L = S.tmf.find(x => x.tag === 'tmf2'); if (L) { S.cash += L.margin; S.tmf = S.tmf.filter(x => x !== L); } S.flags.tmf2 = false; }
+          blocked: (!S.flags.tmf2 && d <= -35 && cash.value < c.tmfMargin) ? `現金不足 ${fmtNT(c.tmfMargin)}` : '',
+          exec() { S.tmf.push({ id: Date.now(), tag: 'tmf2', entry: S.ath * 0.65, margin: c.tmfMargin }); S.flags.tmf2 = true; },
+          undo() { S.tmf = S.tmf.filter(x => x.tag !== 'tmf2'); S.flags.tmf2 = false; }
         }
       ];
     });
@@ -786,15 +787,11 @@ createApp({
       const v = parseFloat(S.idxInput);
       if (!isFinite(v) || v <= 0) return;
       S.idx = v;
-      if (v > S.ath) { S.ath = v; S.athDraft = v; }  // 創高自動上修 ATH
+      if (v > S.ath) S.ath = v;  // 創高自動上修 ATH（僅此一種更新途徑，不提供手動修正）
     }
-    function saveAth() {
-      if (isFinite(S.athDraft) && S.athDraft > 0) { S.ath = S.athDraft; S.athEditing = false; }
-    }
-    function resetAthToIndex() { S.ath = S.idx; S.athDraft = S.idx; }
 
-    function closeTmfAll() { /* V 轉一鍵平倉：保證金 + 損益全數轉回現金 */
-      S.tmf.forEach(L => { S.cash += L.margin + lotPnl(L); });
+    function closeTmfAll() {  // V 轉一鍵平倉：已實現損益入帳，保證金隨持倉清空自動釋回現金部位
+      S.realizedPnl += S.tmf.reduce((s, L) => s + lotPnl(L), 0);
       S.tmf = []; S.flags.tmf1 = false; S.flags.tmf2 = false;
     }
 
@@ -807,7 +804,7 @@ createApp({
     function resetLedger() {
       if (!confirm('確定依目前設定重建帳本？將清空補倉與微台狀態（不影響下方個股/美股持倉清單）。')) return;
       Object.assign(S.cfg, S.cfgDraft);
-      S.us = S.cfg.usInitial; S.cash = S.cfg.cashInitial;
+      S.realizedPnl = 0;
       S.tranches = [{ id: 1, label: '初始配置', shares: S.cfg.l2Shares, costPrice: S.cfg.l2CostPrice, entryDelta: dd.value }];
       S.tmf = []; S.flags = { buy1: false, buy2: false, tmf1: false, tmf2: false };
       S.settingsOpen = false;
@@ -855,7 +852,7 @@ createApp({
       if (!isFinite(v) || v <= 0) throw new Error('mis 數值無效');
       return { v, close: false };
     }
-    /* 批次解析：回傳 Map<'代號' , 價格>，供大盤+正二+個股一次查詢用 */
+    /* 批次解析：回傳 { map: Map<代號,價格>, raw: 原始msgArray }，供大盤+正二+個股一次查詢用 */
     function parseMisBatch(txt) {
       const j = JSON.parse(txt);
       const arr = j.msgArray;
@@ -866,7 +863,7 @@ createApp({
         if (isFinite(v) && v > 0) map.set(m.c, v);  // m.c = 股票代號
       }
       if (!map.size) throw new Error('mis 批次全部無效');
-      return map;
+      return { map, raw: arr };
     }
     function parseYahoo(txt) {
       const j = JSON.parse(txt);
@@ -927,9 +924,17 @@ createApp({
 
       let indexDone = false;
       try {
-        const { result: priceMap, label } = await raceAttempts(misAttempts);
+        const { result, label } = await raceAttempts(misAttempts);
+        const priceMap = result.map;
+        const t00Raw = result.raw.find(m => m.c === 't00');
         const idxV = priceMap.get('t00');
-        if (idxV) { applyFetched({ v: idxV, close: false }, label); indexDone = true; }
+        if (idxV) {
+          /* 'h' 為證交所回傳的今日盤中最高價；沒有時退回現價本身 */
+          const high = t00Raw ? parseFloat(t00Raw.h) : NaN;
+          S.todayHigh = isFinite(high) && high > 0 ? high : idxV;
+          applyFetched({ v: idxV, close: false, high: S.todayHigh }, label);
+          indexDone = true;
+        }
         const l2V = priceMap.get('00631L');
         if (l2V) { S.l2.price = l2V; S.l2.ok = true; } else { S.l2.ok = false; }
         S.stocks.forEach(s => {
@@ -972,11 +977,13 @@ createApp({
     function applyFetched(r, label) {
       S.idx = r.v;
       S.idxInput = String(r.v);
-      /* ATH 上修規則：live 模式即時上修；close 模式僅在收盤資料或非盤中時上修 */
+      /* ATH 上修規則：live 模式即時上修；close 模式僅在收盤資料或非盤中時上修。
+         同時比對「今日盤中最高」，避免輪詢間隔中的瞬間高點被錯過。 */
+      const candidate = Math.max(r.v, r.high || 0);
       const mayRaise = S.athMode === 'live' || r.close || !marketOpen();
-      if (mayRaise && r.v > S.ath) { S.ath = r.v; S.athDraft = r.v; }
+      if (mayRaise && candidate > S.ath) { S.ath = candidate; }
       S.feed.ok = true;
-      const athNote = (!mayRaise && r.v > S.ath) ? '（盤中創高，ATH 待收盤確認）' : '';
+      const athNote = (!mayRaise && candidate > S.ath) ? '（盤中創高，ATH 待收盤確認）' : '';
       S.feed.msg = `${label} · ${r.date ? r.date + ' 收盤' : clock() + ' 更新'}${athNote}${S.auto && marketOpen() ? ` · ${S.cfg.pollSec}s 後自動更新` : ''}`;
     }
 
@@ -993,7 +1000,7 @@ createApp({
 
     /* ─────────── LocalStorage 自動存檔 ─────────── */
     watch(
-      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, us: S.us, cash: S.cash, tranches: S.tranches, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode, stocks: S.stocks, usStocks: S.usStocks }),
+      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, realizedPnl: S.realizedPnl, tranches: S.tranches, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode, stocks: S.stocks, usStocks: S.usStocks }),
       json => localStorage.setItem(LS_KEY, json)
     );
 
@@ -1019,8 +1026,8 @@ createApp({
     function simulate(path, cfg) {
       /* 正二價格模型：l2AthP = ATH 時點的正二淨值；創高段用 ×2.25、回檔段用 ×1.85 */
       let ath = path[0], l2AthP = 1.0;
-      let cash = cfg.cashInitial, us = cfg.usInitial;
-      let units = cfg.l2Shares * cfg.l2CostPrice;  // 起始淨值 1.0，units 即為 NT$ 金額（沙盒獨立運算，不影響實盤帳本）
+      let units = cfg.l2Shares * cfg.l2CostPrice;  // 起始持倉成本（沙盒獨立運算，不影響實盤帳本）
+      let cash = cfg.totalCapital - units;          // 現金 = 總資本 − 初始正二成本（與實盤同一套推導邏輯）
       let lots = [], f = { b1: 0, b2: 0, t1: 0, t2: 0 };
       let holdUnits = cfg.totalCapital;   // 滿倉正二對照組
       const strat = [], hold = [];
@@ -1036,14 +1043,14 @@ createApp({
           lots.forEach(L => { cash += L.margin + (p - L.entry) * cfg.pointValue; });
           lots = []; f.t1 = 0; f.t2 = 0;
         }
-        /* 板機（依紀律自動執行，受剩餘資金限制） */
+        /* 板機（依紀律自動執行，受剩餘資金限制；補倉2 已改為全額現金來源） */
         if (!f.b1 && d <= -12 && cash >= 200000) { cash -= 200000; units += 200000 / l2p; f.b1 = 1; }
-        if (!f.b2 && d <= -24 && us >= 250000 && cash >= 50000) { us -= 250000; cash -= 50000; units += 300000 / l2p; f.b2 = 1; }
+        if (!f.b2 && d <= -24 && cash >= 300000) { cash -= 300000; units += 300000 / l2p; f.b2 = 1; }
         if (!f.t1 && d <= -25 && cash >= cfg.tmfMargin) { cash -= cfg.tmfMargin; lots.push({ entry: ath * 0.75, margin: cfg.tmfMargin }); f.t1 = 1; }
         if (!f.t2 && d <= -35 && cash >= cfg.tmfMargin) { cash -= cfg.tmfMargin; lots.push({ entry: ath * 0.65, margin: cfg.tmfMargin }); f.t2 = 1; }
 
         const futEq = lots.reduce((s, L) => s + L.margin + (p - L.entry) * cfg.pointValue, 0);
-        strat.push(units * l2p + us + cash + futEq);
+        strat.push(units * l2p + cash + futEq);
         hold.push(holdUnits * l2p);
       }
       const stat = arr => {
@@ -1080,7 +1087,7 @@ createApp({
       allocChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['正二 00631L', '美股流動資產', '現金預備金', '期貨專戶'],
+          labels: ['正二 00631L', '個股持倉（台+美）', '現金部位', '期貨專戶'],
           datasets: [{
             data: allocData(),
             backgroundColor: ['#26a69a', '#3b82f6', '#94a3b8', '#f0b90b'],
@@ -1097,7 +1104,7 @@ createApp({
       });
     }
     function allocData() {
-      return [Math.max(l2Value.value, 0), Math.max(S.us, 0), Math.max(S.cash, 0), Math.max(futuresEquity.value, 0)];
+      return [Math.max(l2Value.value, 0), Math.max(stocksValue.value + usStocksValueTWD.value, 0), Math.max(cash.value, 0), Math.max(futuresEquity.value, 0)];
     }
     watch(allocData, v => { if (allocChart) { allocChart.data.datasets[0].data = v; allocChart.update('none'); } });
 
@@ -1141,11 +1148,12 @@ createApp({
     return {
       ...toRefs(S),
       dd, light, triggers, todayActions,
-      l2Value, l2Ret, l2SharesTotal, lotPnl, tmfPnl, tmfMarginTotal, futuresEquity, maintPct,
+      l2Value, l2Ret, l2SharesTotal, lotPnl, tmfPnl, tmfMarginTotal, futuresEquity, maintPct, cash,
       stockPnl, stockPnlPct, stocksValue, stocksRet, addStock, removeStock,
       usStockPnlTWD, usStockPnlPct, usStocksValueTWD, usStocksRet, addUsStock, removeUsStock,
+      combinedStocksRet,
       totalAsset, totalPnlPct, vTurnReady, vaultResetReady,
-      applyIndex, saveAth, resetAthToIndex, closeTmfAll,
+      applyIndex, closeTmfAll,
       saveSettings, resetLedger, wipeAll,
       scenarioDefs, runScenario,
       fetchNow, toggleAuto,
