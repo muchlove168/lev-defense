@@ -18,19 +18,20 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        base:   '#0a0e17',   // 頁面底色
-        panel:  '#111827e6', // 面板
-        card:   '#151d2b',   // 卡片
-        line:   '#1f2a3c',   // 邊框
-        ink:    '#d3dae8',   // 主文字
-        mute:   '#7c8ba3',   // 次要文字
-        up:     '#26a69a',   // 多方 / 安全
-        upsoft: '#26a69a22',
-        dn:     '#ef5350',   // 空方 / 危險
-        dnsoft: '#ef535022',
-        warn:   '#f0b90b',   // 預警
-        warnsoft:'#f0b90b1f',
-        blue:   '#3b82f6',
+        base:   '#00302e',   // 頁面底色（比背景更深，用於輸入框凹陷感）
+        panel:  '#004643e6', // 面板
+        card:   '#013c39',   // 卡片
+        line:   '#0a5651',   // 邊框
+        ink:    '#fffffe',   // 主文字（標題白）
+        mute:   '#abd1c6',   // 次要文字（綠灰）
+        up:     '#7bc47f',   // 多方 / 安全（柔和綠，與底色區隔）
+        upsoft: '#7bc47f22',
+        dn:     '#e16162',   // 空方 / 危險（Happy Hues tertiary 紅）
+        dnsoft: '#e1616222',
+        warn:   '#f9bc60',   // 預警 / 高亮（Happy Hues button 暖黃）
+        warnsoft:'#f9bc601f',
+        blue:   '#5b8fd6',   // 個股藍（調柔和以融入綠色系）
+        hlbg:   '#004643',   // 頁面主背景
       },
       fontFamily: {
         sans: ['"Noto Sans TC"', 'system-ui', 'sans-serif'],
@@ -42,20 +43,20 @@ tailwind.config = {
 </script>
 
 <style>
-  html { scrollbar-color:#243049 #0d1320; }
+  html { scrollbar-color:#0a5651 #003633; }
   body { background:
-      radial-gradient(1200px 500px at 80% -10%, #12233a55, transparent),
-      radial-gradient(900px 400px at -10% 110%, #0e2a2455, transparent),
-      #0a0e17;
+      radial-gradient(1200px 500px at 80% -10%, #0a565155, transparent),
+      radial-gradient(900px 400px at -10% 110%, #01302e55, transparent),
+      #004643;
   }
   ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#243049; border-radius:6px; }
-  ::-webkit-scrollbar-track { background:#0d1320; }
+  ::-webkit-scrollbar-thumb { background:#0a5651; border-radius:6px; }
+  ::-webkit-scrollbar-track { background:#003633; }
 
   /* 招牌元素：Δ% 巨型讀數的呼吸光暈 */
-  .dd-glow-green { text-shadow:0 0 24px #26a69a66; }
-  .dd-glow-amber { text-shadow:0 0 24px #f0b90b66; }
-  .dd-glow-red   { text-shadow:0 0 26px #ef535088; animation:pulse-red 1.6s ease-in-out infinite; }
+  .dd-glow-green { text-shadow:0 0 24px #7bc47f66; }
+  .dd-glow-amber { text-shadow:0 0 24px #f9bc6066; }
+  .dd-glow-red   { text-shadow:0 0 26px #e1616288; animation:pulse-red 1.6s ease-in-out infinite; }
   @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:.72} }
   @media (prefers-reduced-motion: reduce){ .dd-glow-red{ animation:none } }
 
@@ -92,50 +93,46 @@ tailwind.config = {
       </div>
 
       <!-- 控制列：點位輸入 / ATH / Δ% -->
-      <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
-
-        <!-- 大盤點位輸入 + 即時行情 -->
-        <div class="bg-card border border-line rounded-xl px-4 py-3">
-          <div class="flex items-center justify-between mb-1.5 gap-2">
-            <div class="text-[11px] text-mute font-bold tracking-widest">大盤現價（加權指數）</div>
+      <div class="mt-3">
+        <!-- 大盤現價 ＋ 歷史高點 ATH ＋ 自高點回檔 Δ%（三合一，純自動更新） -->
+        <div class="bg-card border rounded-xl px-4 py-3" :class="light.borderCls">
+          <div class="flex items-center justify-between mb-2 gap-2">
+            <div class="text-[11px] text-mute font-bold tracking-widest">大盤即時行情</div>
             <button @click="toggleAuto"
                     class="text-[10px] font-black px-2 py-0.5 rounded-full border transition"
                     :class="auto ? 'border-up/60 bg-upsoft text-up' : 'border-line text-mute hover:text-ink'">
               {{ auto ? '⟳ 自動更新：開' : '⟳ 自動更新：關' }}
             </button>
           </div>
-          <div class="flex gap-2">
-            <input v-model="idxInput" @keyup.enter="applyIndex" type="number" inputmode="decimal"
-                   class="num w-full bg-base border border-line rounded-lg px-3 py-2 text-lg font-semibold focus:outline-none focus:border-up"
-                   placeholder="輸入指數點位">
-            <button @click="fetchNow" :disabled="feed.busy" title="立即抓取最新指數"
-                    class="px-3 rounded-lg border border-line bg-base hover:border-up/60 text-lg disabled:opacity-40 transition">
-              <span :class="feed.busy ? 'inline-block animate-spin' : ''">↻</span>
-            </button>
-            <button @click="applyIndex"
-                    class="px-4 rounded-lg bg-up/90 hover:bg-up text-base font-bold text-[#062b27] whitespace-nowrap transition">
-              套用
-            </button>
+
+          <div class="grid grid-cols-3 gap-4 items-center">
+            <!-- 大盤現價 -->
+            <div>
+              <div class="text-[11px] text-mute font-bold tracking-widest mb-0.5">大盤現價（加權指數）</div>
+              <div class="num text-3xl font-extrabold text-ink leading-tight">{{ fmt(idx) }}</div>
+              <button @click="fetchNow" :disabled="feed.busy"
+                      class="mt-1 text-[10px] px-2 py-0.5 rounded border border-line text-mute hover:border-up/60 transition inline-flex items-center gap-1">
+                <span :class="feed.busy ? 'inline-block animate-spin' : ''">↻</span> 立即更新
+              </button>
+            </div>
+            <!-- 歷史最高點 -->
+            <div>
+              <div class="text-[11px] text-mute font-bold tracking-widest mb-0.5">歷史最高點 ATH</div>
+              <div class="num text-3xl font-extrabold text-ink leading-tight">{{ fmt(ath) }}</div>
+              <div class="text-[10px] text-mute mt-1">距 <span class="num font-bold" :class="dd<0?'text-dn':'text-up'">{{ fmt(idx - ath) }}</span> 點</div>
+            </div>
+            <!-- 自高點回檔 -->
+            <div class="text-right">
+              <div class="text-[11px] text-mute font-bold tracking-widest mb-0.5">自高點回檔 Δ%</div>
+              <div class="num text-4xl font-extrabold leading-tight" :class="[light.textCls, light.glowCls]">
+                {{ dd >= 0 ? '+' : '' }}{{ dd.toFixed(2) }}<span class="text-xl">%</span>
+              </div>
+            </div>
           </div>
-          <div class="mt-1.5 text-[10px] leading-4 flex items-center gap-1.5">
+
+          <div class="mt-2 pt-2 border-t border-line text-[10px] leading-4 flex items-center gap-1.5">
             <span :class="feed.ok===true ? 'text-up' : feed.ok===false ? 'text-dn' : 'text-mute'">●</span>
             <span class="text-mute">{{ feed.msg }}</span>
-          </div>
-        </div>
-
-        <!-- 歷史高點 ATH ＋ 自高點回檔 Δ%（合併） -->
-        <div class="bg-card border rounded-xl px-4 py-2.5 flex items-center justify-between gap-4"
-             :class="light.borderCls">
-          <div class="shrink-0">
-            <div class="text-[11px] text-mute font-bold tracking-widest">歷史最高點 ATH</div>
-            <div class="num text-xl font-extrabold text-ink leading-tight">{{ fmt(ath) }}</div>
-            <div class="text-[10px] text-mute mt-0.5">現價 <span class="num text-ink font-bold">{{ fmt(idx) }}</span> · 距 <span class="num font-bold" :class="dd<0?'text-dn':'text-up'">{{ fmt(idx - ath) }}</span> 點</div>
-          </div>
-          <div class="text-right">
-            <div class="text-[11px] text-mute font-bold tracking-widest">自高點回檔 Δ%</div>
-            <div class="num text-4xl font-extrabold leading-tight" :class="[light.textCls, light.glowCls]">
-              {{ dd >= 0 ? '+' : '' }}{{ dd.toFixed(2) }}<span class="text-xl">%</span>
-            </div>
           </div>
         </div>
       </div>
@@ -153,7 +150,7 @@ tailwind.config = {
           持倉 {{ tmf.length }} 口 · 浮動獲利 <span class="num font-bold text-up">{{ fmtNT(tmfPnl) }}</span>，平倉後純現金獲利與保證金全數轉回預備金。
         </div>
       </div>
-      <button @click="closeTmfAll" class="px-4 py-2 rounded-lg bg-up text-[#062b27] font-black hover:brightness-110 transition">
+      <button @click="closeTmfAll" class="px-4 py-2 rounded-lg bg-up text-[#001e1d] font-black hover:brightness-110 transition">
         一鍵平倉 → 轉回預備金
       </button>
     </div>
@@ -194,15 +191,15 @@ tailwind.config = {
                   <div v-if="t.blocked" class="text-[11px] text-dn mt-1">⛔ {{ t.blocked }}</div>
                 </div>
                 <span class="shrink-0 text-[11px] font-black px-2 py-1 rounded-md"
-                      :class="t.state==='可執行' ? 'bg-warn text-[#3a2c00]'
-                             : t.state==='已執行' ? 'bg-up text-[#062b27]'
+                      :class="t.state==='可執行' ? 'bg-warn text-[#001e1d]'
+                             : t.state==='已執行' ? 'bg-up text-[#001e1d]'
                              : 'bg-line text-mute'">
                   {{ t.state }}
                 </span>
               </div>
               <div class="mt-2 flex gap-2" v-if="t.state!=='未達標'">
                 <button v-if="t.state==='可執行'" @click="t.exec()" :disabled="!!t.blocked"
-                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-warn text-[#3a2c00] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition">
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-warn text-[#001e1d] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition">
                   標記已執行
                 </button>
                 <button v-if="t.state==='已執行'" @click="t.undo()"
@@ -294,13 +291,19 @@ tailwind.config = {
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
             <!-- 環形圖 -->
-            <div class="relative h-56">
-              <canvas id="allocChart"></canvas>
-              <div class="absolute inset-0 grid place-items-center pointer-events-none">
-                <div class="text-center">
+            <div>
+              <div class="relative h-52">
+                <canvas id="allocChart"></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
                   <div class="text-[10px] text-mute font-bold tracking-widest">TOTAL</div>
                   <div class="num font-black text-sm">{{ fmtNT(totalAsset) }}</div>
                 </div>
+              </div>
+              <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#7bc47f"></span><span class="text-mute">正二 00631L</span></div>
+                <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#5b8fd6"></span><span class="text-mute">個股（台+美）</span></div>
+                <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#abd1c6"></span><span class="text-mute">現金部位</span></div>
+                <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#f9bc60"></span><span class="text-mute">期貨專戶</span></div>
               </div>
             </div>
 
@@ -362,7 +365,7 @@ tailwind.config = {
                     <input v-model.number="newTmf.margin" type="number" :placeholder="'保證金(預設'+cfg.tmfMargin+')'" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
                   </div>
                   <div class="flex gap-2">
-                    <button @click="addTmfManual" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">確認新增</button>
+                    <button @click="addTmfManual" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
                     <button @click="addingTmf=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
                   </div>
                 </div>
@@ -415,7 +418,7 @@ tailwind.config = {
             <input v-model.number="newStock.costPrice" type="number" placeholder="成本價" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
           </div>
           <div class="flex gap-2">
-            <button @click="addStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">確認新增</button>
+            <button @click="addStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
             <button @click="addingStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
           </div>
         </div>
@@ -460,7 +463,7 @@ tailwind.config = {
             <input v-model.number="newUsStock.costUSD" type="number" placeholder="成本(美元)" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
           </div>
           <div class="flex gap-2">
-            <button @click="addUsStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">確認新增</button>
+            <button @click="addUsStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
             <button @click="addingUsStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
           </div>
         </div>
@@ -587,7 +590,7 @@ tailwind.config = {
         </label>
       </div>
       <div class="flex flex-wrap gap-2 pt-1">
-        <button @click="saveSettings" class="flex-1 px-4 py-2 rounded-lg bg-up text-[#062b27] font-black hover:brightness-110 transition">儲存設定</button>
+        <button @click="saveSettings" class="flex-1 px-4 py-2 rounded-lg bg-up text-[#001e1d] font-black hover:brightness-110 transition">儲存設定</button>
         <button @click="resetLedger" class="px-4 py-2 rounded-lg border border-warn/60 text-warn text-sm font-bold hover:bg-warnsoft transition">依設定重置帳本</button>
         <button @click="wipeAll" class="px-4 py-2 rounded-lg border border-dn/60 text-dn text-sm font-bold hover:bg-dnsoft transition">清除全部資料</button>
       </div>
@@ -1179,9 +1182,9 @@ createApp({
 
     /* ─────────── Chart.js ─────────── */
     let allocChart = null, scenChart = null;
-    Chart.defaults.color = '#7c8ba3';
+    Chart.defaults.color = '#abd1c6';
     Chart.defaults.font.family = '"JetBrains Mono","Noto Sans TC",monospace';
-    Chart.defaults.borderColor = '#1f2a3c';
+    Chart.defaults.borderColor = '#0a5651';
 
     function drawAllocChart() {
       const ctx = document.getElementById('allocChart');
@@ -1192,14 +1195,15 @@ createApp({
           labels: ['正二 00631L', '個股持倉（台+美）', '現金部位', '期貨專戶'],
           datasets: [{
             data: allocData(),
-            backgroundColor: ['#26a69a', '#3b82f6', '#94a3b8', '#f0b90b'],
-            borderColor: '#151d2b', borderWidth: 3, hoverOffset: 6
+            backgroundColor: ['#7bc47f', '#5b8fd6', '#abd1c6', '#f9bc60'],
+            borderColor: '#013c39', borderWidth: 3, hoverOffset: 6
           }]
         },
         options: {
           responsive: true, maintainAspectRatio: false, cutout: '68%',
+          layout: { padding: 4 },
           plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } },
+            legend: { display: false },
             tooltip: { callbacks: { label: c => ` ${c.label}: NT$ ${Math.round(c.parsed).toLocaleString()}` } }
           }
         }
@@ -1219,9 +1223,9 @@ createApp({
         data: {
           labels: S.scen.labels,
           datasets: [
-            { label: '防禦策略', data: S.scen.strat.series, borderColor: '#3b82f6',
-              backgroundColor: '#3b82f622', fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
-            { label: '滿倉正二', data: S.scen.hold.series, borderColor: '#ef5350',
+            { label: '防禦策略', data: S.scen.strat.series, borderColor: '#f9bc60',
+              backgroundColor: '#f9bc6022', fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
+            { label: '滿倉正二', data: S.scen.hold.series, borderColor: '#e16162',
               borderDash: [5, 4], pointRadius: 0, borderWidth: 1.5, tension: .25 }
           ]
         },
