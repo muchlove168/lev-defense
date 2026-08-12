@@ -123,14 +123,10 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- ATH（完全自動：跟隨即時行情追蹤，不提供手動輸入） -->
+        <!-- ATH（完全自動：抓取真實歷史最高點，不提供手動輸入） -->
         <div class="bg-card border border-line rounded-xl px-4 py-3">
-          <div class="flex items-center justify-between mb-1.5">
-            <div class="text-[11px] text-mute font-bold tracking-widest">歷史最高點 ATH（自動追蹤大盤歷史高點）</div>
-            <span class="text-[10px] px-1.5 py-0.5 rounded bg-line text-mute">🔒 自動，不可手動輸入</span>
-          </div>
+          <div class="text-[11px] text-mute font-bold tracking-widest mb-1.5">歷史最高點 ATH（真實歷史高點）</div>
           <div class="num text-2xl font-extrabold text-ink">{{ fmt(ath) }}</div>
-          <div class="text-[10px] text-mute mt-1">今日盤中高點 {{ todayHigh ? fmt(todayHigh) : '—' }}</div>
         </div>
 
         <!-- Δ% 巨型讀數（招牌元素） -->
@@ -251,21 +247,30 @@ tailwind.config = {
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
               <div class="text-[11px] text-mute font-bold flex items-center gap-1">
-                正二市值
-                <span class="text-[9px] px-1 rounded" :class="l2.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ l2.ok ? '即時' : '估算' }}</span>
+                正二 00631L 市值
+                <span class="text-[9px] px-1 rounded" :class="l2.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ l2.ok ? '即時' : '成本價' }}</span>
               </div>
               <div class="num font-extrabold text-lg">{{ fmtNT(l2Value) }}</div>
-              <div class="text-[11px] num" :class="l2Ret>=0?'text-up':'text-dn'">{{ l2Ret>=0?'+':'' }}{{ l2Ret.toFixed(2) }}% · {{ fmt(l2SharesTotal) }} 股</div>
+              <div class="text-[11px] num" :class="l2Ret>=0?'text-up':'text-dn'">
+                {{ l2Ret>=0?'+':'' }}{{ l2Ret.toFixed(2) }}% · {{ fmt(l2SharesTotal) }} 股 @ {{ fmt(l2.ok ? l2.price : cfg.l2CostPrice) }}
+              </div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
               <div class="text-[11px] text-mute font-bold flex items-center gap-1">
-                個股市值（台股＋美股）
-                <span class="text-[9px] px-1 rounded" :class="(stocks.length||usStocks.length) ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ (stocks.length||usStocks.length) ? '即時' : '—' }}</span>
+                個股市值（台股）
+                <span class="text-[9px] px-1 rounded" :class="stocks.length ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ stocks.length?'即時':'—' }}</span>
               </div>
-              <div class="num font-extrabold text-lg">{{ fmtNT(stocksValue + usStocksValueTWD) }}</div>
-              <div class="text-[11px] num" :class="combinedStocksRet>=0?'text-up':'text-dn'">
-                {{ (stocks.length||usStocks.length) ? (combinedStocksRet>=0?'+':'')+combinedStocksRet.toFixed(2)+'%' : '尚未新增' }}
-                <span class="text-mute">· 台股{{ fmtNT(stocksValue) }} 美股{{ fmtNT(usStocksValueTWD) }}</span>
+              <div class="num font-extrabold text-lg">{{ fmtNT(stocksValue) }}</div>
+              <div class="text-[11px] num" :class="stocksRet>=0?'text-up':'text-dn'">{{ stocks.length ? (stocksRet>=0?'+':'')+stocksRet.toFixed(2)+'%' : '尚未新增' }}</div>
+            </div>
+            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
+              <div class="text-[11px] text-mute font-bold flex items-center gap-1">
+                個股市值（美股）
+                <span class="text-[9px] px-1 rounded" :class="fx.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ fx.ok ? '匯率即時' : '匯率估算' }}</span>
+              </div>
+              <div class="num font-extrabold text-lg">{{ fmtNT(usStocksValueTWD) }}</div>
+              <div class="text-[11px] num" :class="usStocksRet>=0?'text-up':'text-dn'">
+                {{ usStocks.length ? (usStocksRet>=0?'+':'')+usStocksRet.toFixed(2)+'%' : '尚未新增' }} · USD/TWD {{ fx.rate ? fx.rate.toFixed(3) : '—' }}
               </div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
@@ -301,9 +306,15 @@ tailwind.config = {
               <div class="font-bold text-sm mb-2">🎯 微台風險計數器</div>
               <template v-if="tmf.length">
                 <div class="space-y-1.5 text-xs">
-                  <div v-for="(L,i) in tmf" :key="L.id" class="flex justify-between num">
-                    <span class="text-mute">第 {{ i+1 }} 口 @ {{ fmt(L.entry) }}</span>
-                    <span :class="lotPnl(L)>=0?'text-up':'text-dn'">{{ lotPnl(L)>=0?'+':'' }}{{ fmtNT(lotPnl(L)) }}</span>
+                  <div v-for="(L,i) in tmf" :key="L.id" class="flex justify-between items-center num">
+                    <span class="text-mute flex items-center gap-1">
+                      第 {{ i+1 }} 口 @ {{ fmt(L.entry) }}
+                      <span class="text-[9px] px-1 rounded bg-line text-mute font-sans">{{ L.tag==='manual' ? '實際' : 'SOP' }}</span>
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                      <span :class="lotPnl(L)>=0?'text-up':'text-dn'">{{ lotPnl(L)>=0?'+':'' }}{{ fmtNT(lotPnl(L)) }}</span>
+                      <button @click="removeTmfLot(L.id)" class="text-mute hover:text-dn px-1">✕</button>
+                    </span>
                   </div>
                   <div class="border-t border-line pt-1.5 flex justify-between font-bold num">
                     <span>浮動損益合計</span>
@@ -323,9 +334,28 @@ tailwind.config = {
               </template>
               <div v-else class="text-xs text-mute leading-6">
                 目前無微台持倉。<br>
-                第 1 口板機：Δ ≤ −25%（{{ fmt(ath*0.75) }}）<br>
-                第 2 口板機：Δ ≤ −35%（{{ fmt(ath*0.65) }}）<br>
+                SOP 第 1 口板機：Δ ≤ −25%（{{ fmt(ath*0.75) }}）<br>
+                SOP 第 2 口板機：Δ ≤ −35%（{{ fmt(ath*0.65) }}）<br>
                 每口維持保證金以 {{ fmtNT(cfg.maintMarginPerLot) }} 估算。
+              </div>
+
+              <!-- 手動新增「實際持倉」：不受 SOP 板機價位限制，供填入更早進場的真實部位 -->
+              <div class="mt-3 pt-3 border-t border-line">
+                <button v-if="!addingTmf" @click="addingTmf=true"
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
+                  ＋ 新增實際持倉
+                </button>
+                <div v-else class="space-y-2">
+                  <div class="text-[10px] text-mute leading-4">SOP 板機仍照原規則自動判斷；這裡讓你補上更早進場、不受板機價位限制的真實微台部位。</div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <input v-model.number="newTmf.entry" type="number" placeholder="進場點位" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+                    <input v-model.number="newTmf.margin" type="number" :placeholder="'保證金(預設'+cfg.tmfMargin+')'" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+                  </div>
+                  <div class="flex gap-2">
+                    <button @click="addTmfManual" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#062b27] transition">確認新增</button>
+                    <button @click="addingTmf=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -472,7 +502,7 @@ tailwind.config = {
     </section>
 
     <footer class="text-[11px] text-mute text-center pb-6 leading-5">
-      正二變動率為估算（下跌 ×1.85 / 上漲 ×2.25），非精確追蹤；微台每點 NT$ {{ cfg.pointValue }}。<br>
+      正二市值以即時股價 × 股數計算（與個股一致）；情境模擬器內的推演才使用估算變動率（下跌 ×1.85 / 上漲 ×2.25）。微台每點 NT$ {{ cfg.pointValue }}。<br>
       指數來源：證交所即時行情（約 5 秒延遲，經 CORS 代理）→ Yahoo ^TWII 備援 → 證交所官方收盤 API；代理暫時失效時請改用手動輸入。<br>
       本工具僅供個人策略紀律推演，不構成任何投資建議。資料自動儲存於本機瀏覽器（LocalStorage）。
     </footer>
@@ -562,8 +592,8 @@ const LS_KEY = 'lfdd_v1';
 
 const DEFAULT_CFG = {
   totalCapital: 2100000,   // 總初始資本（現金部位 = 這個 − 所有持倉成本 − 微台保證金，自動算）
-  l2Shares:        6300,   // 正二 (00631L) 股數
-  l2CostPrice:   222.22,   // 正二每股成本價（NT$）
+  l2Shares:       37000,   // 正二 (00631L) 股數（預設值，請至設定改為你的真實持倉）
+  l2CostPrice:      37.5,   // 正二每股成本價（NT$，00631L 分割後價位約 37 元；請改為你的真實成本）
   tmfMargin:     200000,   // 微台每口「劃撥」保證金
   pointValue:        10,   // 微台每點價值
   maintMarginPerLot: 28000,// 每口原始/維持保證金估算基準
@@ -585,7 +615,6 @@ createApp({
       ath: 24000,
       idx: 24000,
       idxInput: '24000',
-      todayHigh: 0,                // 今日盤中最高（來自即時行情，僅顯示參考用）
       settingsOpen: false,
       /* 現金部位不再手動輸入，改由 computed cash 自動算：總資本 − 各持倉成本 − 微台保證金 + 已實現損益 */
       realizedPnl: 0,              // 微台平倉時的已實現損益累積（V轉全平時入帳）
@@ -610,6 +639,9 @@ createApp({
       usStocks: [],
       addingUsStock: false,
       newUsStock: { ticker: '', shares: null, costUSD: null },
+      /* 微台手動新增（實際持倉，不受 SOP 板機價位限制） */
+      addingTmf: false,
+      newTmf: { entry: null, margin: null },
       /* 即時美元兌台幣匯率 */
       fx: { rate: 31.5, ok: false }
     });
@@ -621,7 +653,13 @@ createApp({
         Object.assign(S.cfg, { ...DEFAULT_CFG, ...saved.cfg });
         Object.assign(S.cfgDraft, S.cfg);
         S.ath = saved.ath; S.idx = saved.idx; S.idxInput = String(saved.idx);
-        S.tranches = saved.tranches; S.tmf = saved.tmf;
+        /* 舊資料遷移：把 legacy 的 amount 格式正二持倉，轉成 shares 格式（以設定的成本價回推股數） */
+        S.tranches = (saved.tranches || []).map(t => {
+          if (t.shares != null) return t;
+          const cp = S.cfg.l2CostPrice > 0 ? S.cfg.l2CostPrice : 1;
+          return { id: t.id || Date.now(), label: t.label, shares: Math.round((t.amount || 0) / cp), costPrice: cp, entryDelta: t.entryDelta || 0 };
+        });
+        S.tmf = saved.tmf;
         if (typeof saved.realizedPnl === 'number') S.realizedPnl = saved.realizedPnl;
         Object.assign(S.flags, saved.flags);
         if (typeof saved.auto === 'boolean') S.auto = saved.auto;
@@ -634,24 +672,19 @@ createApp({
     /* ─────────── 衍生數值 ─────────── */
     const dd = computed(() => S.ath ? (S.idx - S.ath) / S.ath * 100 : 0);
 
+    /* 正二市值：完全比照個股 —— 股數 × (即時股價 或 成本價)。不再使用 Δ% 估算。 */
     const l2Value = computed(() =>
-      S.tranches.reduce((sum, t) => {
-        if (t.shares != null) return sum + t.shares * (S.l2.ok ? S.l2.price : t.costPrice);
-        return sum + t.amount * l2Rel(dd.value) / l2Rel(t.entryDelta);  // legacy 估算備援
-      }, 0)
+      S.tranches.reduce((sum, t) => sum + t.shares * (S.l2.ok ? S.l2.price : t.costPrice), 0)
     );
-    const l2Cost  = computed(() => S.tranches.reduce((s, t) => s + (t.shares != null ? t.shares * t.costPrice : t.amount), 0));
+    const l2Cost  = computed(() => S.tranches.reduce((s, t) => s + t.shares * t.costPrice, 0));
     const l2Ret   = computed(() => l2Cost.value ? (l2Value.value / l2Cost.value - 1) * 100 : 0);
     const l2SharesTotal = computed(() => S.tranches.reduce((s, t) => s + (t.shares || 0), 0));
 
-    /* 板機補倉：有即時 00631L 股價時直接換算股數（精確），否則沿用 Δ% 估算模式（備援） */
+    /* 板機補倉：以即時 00631L 股價換算股數（無即時價時退回成本價估算股數，仍維持股數制） */
     function addL2Buy(label, amountNT, entryDelta) {
-      if (S.l2.ok && S.l2.price > 0) {
-        const shares = Math.floor(amountNT / S.l2.price);
-        S.tranches.push({ id: Date.now(), label, shares, costPrice: S.l2.price, entryDelta });
-      } else {
-        S.tranches.push({ id: Date.now(), label, amount: amountNT, entryDelta });
-      }
+      const price = (S.l2.ok && S.l2.price > 0) ? S.l2.price : S.cfg.l2CostPrice;
+      const shares = Math.floor(amountNT / price);
+      S.tranches.push({ id: Date.now(), label, shares, costPrice: price, entryDelta });
     }
 
     /* ─────────── 個股持倉（台股） ─────────── */
@@ -693,6 +726,24 @@ createApp({
     const lotPnl = L => (S.idx - L.entry) * S.cfg.pointValue;
     const tmfPnl = computed(() => S.tmf.reduce((s, L) => s + lotPnl(L), 0));
     const tmfMarginTotal = computed(() => S.tmf.reduce((s, L) => s + L.margin, 0));
+
+    /* 手動新增「實際持倉」：填入更早進場、不受 SOP 板機價位限制的真實微台部位 */
+    function addTmfManual() {
+      const entry = S.newTmf.entry;
+      if (!entry || entry <= 0) return;
+      const margin = S.newTmf.margin > 0 ? S.newTmf.margin : S.cfg.tmfMargin;
+      S.tmf.push({ id: Date.now(), tag: 'manual', entry, margin });
+      S.newTmf = { entry: null, margin: null };
+      S.addingTmf = false;
+    }
+    /* 移除任一口持倉（含 SOP 板機建倉與手動實際持倉）；若移除的是 SOP 板機口，連動重置對應旗標，讓該板機回到可再次觸發的狀態 */
+    function removeTmfLot(id) {
+      const L = S.tmf.find(x => x.id === id);
+      if (!L) return;
+      S.tmf = S.tmf.filter(x => x.id !== id);
+      if (L.tag === 'tmf1') S.flags.tmf1 = false;
+      if (L.tag === 'tmf2') S.flags.tmf2 = false;
+    }
     const futuresEquity  = computed(() => tmfMarginTotal.value + tmfPnl.value);
     const maintPct = computed(() =>
       S.tmf.length ? futuresEquity.value / (S.cfg.maintMarginPerLot * S.tmf.length) * 100 : 0
@@ -926,15 +977,8 @@ createApp({
       try {
         const { result, label } = await raceAttempts(misAttempts);
         const priceMap = result.map;
-        const t00Raw = result.raw.find(m => m.c === 't00');
         const idxV = priceMap.get('t00');
-        if (idxV) {
-          /* 'h' 為證交所回傳的今日盤中最高價；沒有時退回現價本身 */
-          const high = t00Raw ? parseFloat(t00Raw.h) : NaN;
-          S.todayHigh = isFinite(high) && high > 0 ? high : idxV;
-          applyFetched({ v: idxV, close: false, high: S.todayHigh }, label);
-          indexDone = true;
-        }
+        if (idxV) { applyFetched({ v: idxV, close: false }, label); indexDone = true; }
         const l2V = priceMap.get('00631L');
         if (l2V) { S.l2.price = l2V; S.l2.ok = true; } else { S.l2.ok = false; }
         S.stocks.forEach(s => {
@@ -978,17 +1022,40 @@ createApp({
       S.idx = r.v;
       S.idxInput = String(r.v);
       /* ATH 上修規則：live 模式即時上修；close 模式僅在收盤資料或非盤中時上修。
-         同時比對「今日盤中最高」，避免輪詢間隔中的瞬間高點被錯過。 */
-      const candidate = Math.max(r.v, r.high || 0);
+         ATH 的「起始基準」來自 fetchHistoricalATH() 抓取的真實歷史最高點，
+         這裡只負責在現價真正創新高時往上追蹤，不會用當日盤中高低點覆蓋基準。 */
       const mayRaise = S.athMode === 'live' || r.close || !marketOpen();
-      if (mayRaise && candidate > S.ath) { S.ath = candidate; }
+      if (mayRaise && r.v > S.ath) { S.ath = r.v; }
       S.feed.ok = true;
-      const athNote = (!mayRaise && candidate > S.ath) ? '（盤中創高，ATH 待收盤確認）' : '';
+      const athNote = (!mayRaise && r.v > S.ath) ? '（盤中創高，ATH 待收盤確認）' : '';
       S.feed.msg = `${label} · ${r.date ? r.date + ' 收盤' : clock() + ' 更新'}${athNote}${S.auto && marketOpen() ? ` · ${S.cfg.pollSec}s 後自動更新` : ''}`;
     }
 
     function fetchNow() { fetchQuote(); }
     function toggleAuto() { S.auto = !S.auto; if (S.auto && marketOpen()) fetchQuote(); }
+
+    /* 抓取加權指數「真實歷史最高點」（非當日高點）：
+       用 Yahoo Finance 長區間月K，逐月的 high 欄位取全歷史最大值即為精確的歷史最高點。
+       只需在載入時抓一次（歷史紀錄不會頻繁變動），之後 ATH 只會被「現價真正創新高」往上追蹤。 */
+    async function fetchHistoricalATH() {
+      const proxies = proxyChain();
+      const url = ticker => `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1mo&range=max`;
+      const attempts = proxies.map(p => ({ get: () => httpText(p.fn(url('^TWII'))) }));
+      for (const a of attempts) {
+        try {
+          const txt = await a.get();
+          const j = JSON.parse(txt);
+          const highs = j.chart && j.chart.result && j.chart.result[0].indicators.quote[0].high;
+          if (!Array.isArray(highs)) throw new Error('無歷史高點資料');
+          const maxHigh = highs.filter(v => isFinite(v) && v > 0).reduce((m, v) => Math.max(m, v), 0);
+          if (maxHigh > 0) {
+            if (maxHigh > S.ath) S.ath = maxHigh;  // 只上修，不覆蓋現有較高的即時追蹤值
+            return;
+          }
+        } catch (e) { /* 換下一個代理來源 */ }
+      }
+      /* 全部來源失敗：保留目前 ATH（多半是已存檔的歷史值或現價），不中斷使用 */
+    }
 
     /* 輪詢：盤中依 cfg.pollSec 自動抓取；非盤中不輪詢（載入時已抓過收盤價） */
     let lastAutoFetch = 0;
@@ -1142,6 +1209,7 @@ createApp({
 
     onMounted(() => {
       drawAllocChart();
+      fetchHistoricalATH();       // 校正 ATH 為真實歷史最高點（只需一次）
       if (S.auto) fetchQuote();   // 載入即抓一次（盤中=即時，盤後=收盤價）
     });
 
@@ -1149,6 +1217,7 @@ createApp({
       ...toRefs(S),
       dd, light, triggers, todayActions,
       l2Value, l2Ret, l2SharesTotal, lotPnl, tmfPnl, tmfMarginTotal, futuresEquity, maintPct, cash,
+      addTmfManual, removeTmfLot,
       stockPnl, stockPnlPct, stocksValue, stocksRet, addStock, removeStock,
       usStockPnlTWD, usStockPnlPct, usStocksValueTWD, usStocksRet, addUsStock, removeUsStock,
       combinedStocksRet,
