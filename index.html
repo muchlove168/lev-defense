@@ -74,8 +74,7 @@ tailwind.config = {
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0">
           <h1 class="text-lg sm:text-xl font-black tracking-wide truncate">
-            台股槓桿防禦儀表板
-            <span class="hidden sm:inline text-mute font-medium text-xs ml-2">00631L × 微台指 · Defense Console</span>
+            長期持有大盤_儀表板
           </h1>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -94,15 +93,12 @@ tailwind.config = {
 
       <!-- 控制列：點位輸入 / ATH / Δ% -->
       <div class="mt-3">
-        <!-- 大盤即時行情（三數字左集中）＋ 今天開盤指引（右） -->
+        <!-- 大盤即時行情（左）＋ 今天開盤指引（右） -->
         <div class="bg-card border rounded-xl px-4 py-3" :class="light.borderCls">
-          <div class="flex items-center justify-between mb-2 gap-2">
-            <div class="text-[11px] text-mute font-bold tracking-widest">大盤即時行情</div>
-          </div>
-
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <!-- 左：三數字等比均分 -->
             <div>
+              <div class="text-[11px] text-mute font-bold tracking-widest mb-2">大盤即時行情</div>
               <div class="grid grid-cols-3 gap-2">
                 <div>
                   <div class="text-[10px] text-mute font-bold tracking-widest mb-0.5">大盤現價</div>
@@ -170,148 +166,8 @@ tailwind.config = {
       </div>
     </div>
 
-    <!-- ═══════════════ 模組 3.5：個股與美股持倉 ═══════════════ -->
-    <section class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <!-- 台股個股持倉 -->
-      <div class="bg-card border border-line rounded-2xl p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-black tracking-wide">個股持倉（台股）</h2>
-        </div>
-        <div v-if="stocks.length" class="space-y-2 mb-3">
-          <div v-for="s in stocks" :key="s.id" class="rounded-xl border border-line bg-base/50 px-3 py-2.5">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <div class="font-bold text-sm flex items-center gap-1.5 flex-wrap">
-                  {{ s.ticker }}<span v-if="s.name" class="text-mute font-medium">· {{ s.name }}</span>
-                  <span class="text-[9px] px-1 rounded" :class="s.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ s.ok ? '即時' : '成本價' }}</span>
-                </div>
-                <div class="text-[11px] text-mute num mt-0.5">{{ fmt(s.shares) }} 股 · 成本 {{ fmt(s.costPrice) }}</div>
-              </div>
-              <button @click="removeStock(s.id)" class="text-mute hover:text-dn text-xs px-1.5">✕</button>
-            </div>
-            <div class="mt-1.5 flex items-center justify-between">
-              <span class="num text-sm font-bold">現價 {{ fmt(s.ok ? s.livePrice : s.costPrice) }}</span>
-              <span class="num text-sm font-bold" :class="stockPnl(s)>=0?'text-up':'text-dn'">
-                {{ stockPnl(s)>=0?'+':'' }}{{ fmtNT(stockPnl(s)) }}（{{ stockPnlPct(s)>=0?'+':'' }}{{ stockPnlPct(s).toFixed(2) }}%）
-              </span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="text-xs text-mute py-3 text-center">尚未新增台股個股持倉</div>
-
-        <button v-if="!addingStock" @click="addingStock=true"
-                class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
-          ＋ 新增台股持倉
-        </button>
-        <div v-else class="space-y-2">
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <input v-model.trim="newStock.ticker" placeholder="代號 如2330" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-            <input v-model.trim="newStock.name" placeholder="名稱（選填）" class="bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-            <input v-model.number="newStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-            <input v-model.number="newStock.costPrice" type="number" placeholder="成本價" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          </div>
-          <div class="flex gap-2">
-            <button @click="addStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
-            <button @click="addingStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 美股個股持倉 -->
-      <div class="bg-card border border-line rounded-2xl p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-black tracking-wide">個股持倉（美股）</h2>
-        </div>
-        <div v-if="usStocks.length" class="space-y-2 mb-3">
-          <div v-for="s in usStocks" :key="s.id" class="rounded-xl border border-line bg-base/50 px-3 py-2.5">
-            <div class="flex items-start justify-between gap-2">
-              <div class="min-w-0">
-                <div class="font-bold text-sm flex items-center gap-1.5">
-                  {{ s.ticker }}
-                  <span class="text-[9px] px-1 rounded" :class="s.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ s.ok ? '即時' : '成本價' }}</span>
-                </div>
-                <div class="text-[11px] text-mute num mt-0.5">{{ fmt(s.shares) }} 股 · 成本 US$ {{ s.costUSD.toFixed(2) }}</div>
-              </div>
-              <button @click="removeUsStock(s.id)" class="text-mute hover:text-dn text-xs px-1.5">✕</button>
-            </div>
-            <div class="mt-1.5 flex items-center justify-between">
-              <span class="num text-sm font-bold">US$ {{ (s.ok ? s.livePriceUSD : s.costUSD).toFixed(2) }}</span>
-              <span class="num text-sm font-bold" :class="usStockPnlTWD(s)>=0?'text-up':'text-dn'">
-                {{ usStockPnlTWD(s)>=0?'+':'' }}{{ fmtNT(usStockPnlTWD(s)) }}（{{ usStockPnlPct(s)>=0?'+':'' }}{{ usStockPnlPct(s).toFixed(2) }}%）
-              </span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="text-xs text-mute py-3 text-center">尚未新增美股個股持倉</div>
-
-        <button v-if="!addingUsStock" @click="addingUsStock=true"
-                class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
-          ＋ 新增美股持倉
-        </button>
-        <div v-else class="space-y-2">
-          <div class="grid grid-cols-3 sm:grid-cols-3 gap-2">
-            <input v-model.trim="newUsStock.ticker" placeholder="代號 如AAPL" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-            <input v-model.number="newUsStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-            <input v-model.number="newUsStock.costUSD" type="number" placeholder="成本(美元)" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
-          </div>
-          <div class="flex gap-2">
-            <button @click="addUsStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
-            <button @click="addingUsStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
+    <!-- ═══ 第一排：資金監控（左） + 個股台股/美股（右，上下堆疊） ═══ -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
-
-      <!-- ═══════════════ 模組 2：戰術執行指示器 ═══════════════ -->
-      <section class="lg:col-span-5 space-y-4">
-        <div class="bg-card border border-line rounded-2xl p-4">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="font-black tracking-wide">戰術執行指示器</h2>
-            <span class="text-[11px] text-mute">觸發基準：ATH {{ fmt(ath) }}</span>
-          </div>
-
-          <div class="space-y-3">
-            <div v-for="t in triggers" :key="t.key"
-                 class="rounded-xl border px-4 py-3 transition"
-                 :class="t.state==='可執行' ? 'border-warn bg-warnsoft'
-                        : t.state==='已執行' ? 'border-up/50 bg-upsoft'
-                        : 'border-line bg-base/40'">
-              <div class="flex items-start justify-between gap-2">
-                <div class="min-w-0">
-                  <div class="font-bold text-sm flex items-center gap-2 flex-wrap">
-                    {{ t.title }}
-                    <span class="num text-[11px] px-1.5 py-0.5 rounded bg-base border border-line text-mute">
-                      Δ ≤ {{ t.threshold }}% · 觸發價 {{ fmt(t.triggerPx) }}
-                    </span>
-                  </div>
-                  <div class="text-xs text-mute mt-1 leading-5">{{ t.desc }}</div>
-                  <div v-if="t.blocked" class="text-[11px] text-dn mt-1">{{ t.blocked }}</div>
-                </div>
-                <span class="shrink-0 text-[11px] font-black px-2 py-1 rounded-md"
-                      :class="t.state==='可執行' ? 'bg-warn text-[#001e1d]'
-                             : t.state==='已執行' ? 'bg-up text-[#001e1d]'
-                             : 'bg-line text-mute'">
-                  {{ t.state }}
-                </span>
-              </div>
-              <div class="mt-2 flex gap-2" v-if="t.state!=='未達標'">
-                <button v-if="t.state==='可執行'" @click="t.exec()" :disabled="!!t.blocked"
-                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-warn text-[#001e1d] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition">
-                  標記已執行
-                </button>
-                <button v-if="t.state==='已執行'" @click="t.undo()"
-                        class="text-xs px-3 py-1.5 rounded-lg border border-line text-mute hover:text-ink transition">
-                  撤銷
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══════════════ 模組 3：資金結構與風險監控 ═══════════════ -->
       <section class="lg:col-span-7 space-y-4">
         <div class="bg-card border border-line rounded-2xl p-4">
           <div class="flex items-center justify-between mb-3">
@@ -328,20 +184,20 @@ tailwind.config = {
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
               <div class="text-[11px] text-mute font-bold flex items-center gap-1">
                 正二 00631L 市值
-                <span class="text-[9px] px-1 rounded" :class="l2.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ l2.ok ? '即時' : '成本價' }}</span>
+                <span class="text-[9px] px-1 rounded" :class="l2Ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ l2SharesTotal ? (l2Ok ? '即時' : '成本價') : '—' }}</span>
               </div>
               <div class="num font-extrabold text-lg">{{ fmtNT(l2Value) }}</div>
               <div class="text-[11px] num" :class="l2Ret>=0?'text-up':'text-dn'">
-                {{ l2Ret>=0?'+':'' }}{{ l2Ret.toFixed(2) }}% · {{ fmt(l2SharesTotal) }} 股 @ {{ (l2.ok ? l2.price : cfg.l2CostPrice).toFixed(2) }}
+                {{ l2SharesTotal ? (l2Ret>=0?'+':'')+l2Ret.toFixed(2)+'% · '+fmt(l2SharesTotal)+' 股 @ '+(l2Ok ? l2Price : (l2Cost/(l2SharesTotal||1))).toFixed(2) : '請至下方台股持倉新增 00631L' }}
               </div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
               <div class="text-[11px] text-mute font-bold flex items-center gap-1">
-                個股市值（台股）
-                <span class="text-[9px] px-1 rounded" :class="stocks.length ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ stocks.length?'即時':'—' }}</span>
+                個股市值（台股，不含正二）
+                <span class="text-[9px] px-1 rounded" :class="otherStocks.length ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ otherStocks.length?'即時':'—' }}</span>
               </div>
-              <div class="num font-extrabold text-lg">{{ fmtNT(stocksValue) }}</div>
-              <div class="text-[11px] num" :class="stocksRet>=0?'text-up':'text-dn'">{{ stocks.length ? (stocksRet>=0?'+':'')+stocksRet.toFixed(2)+'%' : '尚未新增' }}</div>
+              <div class="num font-extrabold text-lg">{{ fmtNT(otherStocksValue) }}</div>
+              <div class="text-[11px] num" :class="otherStocksRet>=0?'text-up':'text-dn'">{{ otherStocks.length ? (otherStocksRet>=0?'+':'')+otherStocksRet.toFixed(2)+'%' : '尚未新增' }}</div>
             </div>
             <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
               <div class="text-[11px] text-mute font-bold flex items-center gap-1">
@@ -462,6 +318,145 @@ tailwind.config = {
           </div>
         </div>
       </section>
+      <section class="lg:col-span-5 space-y-5">
+      <!-- 台股個股持倉 -->
+      <div class="bg-card border border-line rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-black tracking-wide">個股持倉（台股）</h2>
+        </div>
+        <div v-if="stocks.length" class="space-y-2 mb-3">
+          <div v-for="s in stocks" :key="s.id" class="rounded-xl border border-line bg-base/50 px-3 py-2.5">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="font-bold text-sm flex items-center gap-1.5 flex-wrap">
+                  {{ s.ticker }}<span v-if="s.name" class="text-mute font-medium">· {{ s.name }}</span>
+                  <span class="text-[9px] px-1 rounded" :class="s.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ s.ok ? '即時' : '成本價' }}</span>
+                </div>
+                <div class="text-[11px] text-mute num mt-0.5">{{ fmt(s.shares) }} 股 · 成本 {{ fmt(s.costPrice) }}</div>
+              </div>
+              <button @click="removeStock(s.id)" class="text-mute hover:text-dn text-xs px-1.5">✕</button>
+            </div>
+            <div class="mt-1.5 flex items-center justify-between">
+              <span class="num text-sm font-bold">現價 {{ fmt(s.ok ? s.livePrice : s.costPrice) }}</span>
+              <span class="num text-sm font-bold" :class="stockPnl(s)>=0?'text-up':'text-dn'">
+                {{ stockPnl(s)>=0?'+':'' }}{{ fmtNT(stockPnl(s)) }}（{{ stockPnlPct(s)>=0?'+':'' }}{{ stockPnlPct(s).toFixed(2) }}%）
+              </span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="text-xs text-mute py-3 text-center">尚未新增台股個股持倉</div>
+
+        <button v-if="!addingStock" @click="addingStock=true"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
+          ＋ 新增台股持倉
+        </button>
+        <div v-else class="space-y-2">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <input v-model.trim="newStock.ticker" placeholder="代號 如2330" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.trim="newStock.name" placeholder="名稱（選填）" class="bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newStock.costPrice" type="number" placeholder="成本價" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+          </div>
+          <div class="flex gap-2">
+            <button @click="addStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
+            <button @click="addingStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 美股個股持倉 -->
+      <div class="bg-card border border-line rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-black tracking-wide">個股持倉（美股）</h2>
+        </div>
+        <div v-if="usStocks.length" class="space-y-2 mb-3">
+          <div v-for="s in usStocks" :key="s.id" class="rounded-xl border border-line bg-base/50 px-3 py-2.5">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="font-bold text-sm flex items-center gap-1.5">
+                  {{ s.ticker }}
+                  <span class="text-[9px] px-1 rounded" :class="s.ok ? 'bg-upsoft text-up' : 'bg-line text-mute'">{{ s.ok ? '即時' : '成本價' }}</span>
+                </div>
+                <div class="text-[11px] text-mute num mt-0.5">{{ fmt(s.shares) }} 股 · 成本 US$ {{ s.costUSD.toFixed(2) }}</div>
+              </div>
+              <button @click="removeUsStock(s.id)" class="text-mute hover:text-dn text-xs px-1.5">✕</button>
+            </div>
+            <div class="mt-1.5 flex items-center justify-between">
+              <span class="num text-sm font-bold">US$ {{ (s.ok ? s.livePriceUSD : s.costUSD).toFixed(2) }}</span>
+              <span class="num text-sm font-bold" :class="usStockPnlTWD(s)>=0?'text-up':'text-dn'">
+                {{ usStockPnlTWD(s)>=0?'+':'' }}{{ fmtNT(usStockPnlTWD(s)) }}（{{ usStockPnlPct(s)>=0?'+':'' }}{{ usStockPnlPct(s).toFixed(2) }}%）
+              </span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="text-xs text-mute py-3 text-center">尚未新增美股個股持倉</div>
+
+        <button v-if="!addingUsStock" @click="addingUsStock=true"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg border border-line text-mute hover:text-up hover:border-up/60 transition">
+          ＋ 新增美股持倉
+        </button>
+        <div v-else class="space-y-2">
+          <div class="grid grid-cols-3 sm:grid-cols-3 gap-2">
+            <input v-model.trim="newUsStock.ticker" placeholder="代號 如AAPL" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newUsStock.shares" type="number" placeholder="股數" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+            <input v-model.number="newUsStock.costUSD" type="number" placeholder="成本(美元)" class="num bg-base border border-line rounded-lg px-2 py-1.5 text-xs">
+          </div>
+          <div class="flex gap-2">
+            <button @click="addUsStock" class="flex-1 text-xs font-bold py-2 rounded-lg bg-up/90 hover:bg-up text-[#001e1d] transition">確認新增</button>
+            <button @click="addingUsStock=false" class="text-xs px-3 rounded-lg border border-line text-mute hover:text-ink transition">取消</button>
+          </div>
+        </div>
+      </div>
+      </section>
+    </div>
+
+    <!-- ═══ 第二排：戰術執行指示器（下方全寬） ═══ -->
+    <div>
+      <section class="lg:col-span-5 space-y-4">
+        <div class="bg-card border border-line rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-black tracking-wide">戰術執行指示器</h2>
+            <span class="text-[11px] text-mute">觸發基準：ATH {{ fmt(ath) }}</span>
+          </div>
+
+          <div class="space-y-3">
+            <div v-for="t in triggers" :key="t.key"
+                 class="rounded-xl border px-4 py-3 transition"
+                 :class="t.state==='可執行' ? 'border-warn bg-warnsoft'
+                        : t.state==='已執行' ? 'border-up/50 bg-upsoft'
+                        : 'border-line bg-base/40'">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="font-bold text-sm flex items-center gap-2 flex-wrap">
+                    {{ t.title }}
+                    <span class="num text-[11px] px-1.5 py-0.5 rounded bg-base border border-line text-mute">
+                      Δ ≤ {{ t.threshold }}% · 觸發價 {{ fmt(t.triggerPx) }}
+                    </span>
+                  </div>
+                  <div class="text-xs text-mute mt-1 leading-5">{{ t.desc }}</div>
+                  <div v-if="t.blocked" class="text-[11px] text-dn mt-1">{{ t.blocked }}</div>
+                </div>
+                <span class="shrink-0 text-[11px] font-black px-2 py-1 rounded-md"
+                      :class="t.state==='可執行' ? 'bg-warn text-[#001e1d]'
+                             : t.state==='已執行' ? 'bg-up text-[#001e1d]'
+                             : 'bg-line text-mute'">
+                  {{ t.state }}
+                </span>
+              </div>
+              <div class="mt-2 flex gap-2" v-if="t.state!=='未達標'">
+                <button v-if="t.state==='可執行'" @click="t.exec()" :disabled="!!t.blocked"
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-warn text-[#001e1d] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition">
+                  標記已執行
+                </button>
+                <button v-if="t.state==='已執行'" @click="t.undo()"
+                        class="text-xs px-3 py-1.5 rounded-lg border border-line text-mute hover:text-ink transition">
+                  撤銷
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
 
 
@@ -529,18 +524,8 @@ tailwind.config = {
           <span class="text-[11px] text-mute font-bold">總初始資本 (NT$)</span>
           <input v-model.number="cfgDraft.totalCapital" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
         </label>
-        <div class="grid grid-cols-2 gap-3">
-          <label class="space-y-1">
-            <span class="text-[11px] text-mute font-bold">正二 (00631L) 股數</span>
-            <input v-model.number="cfgDraft.l2Shares" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
-          </label>
-          <label class="space-y-1">
-            <span class="text-[11px] text-mute font-bold">正二成本價（每股）</span>
-            <input v-model.number="cfgDraft.l2CostPrice" type="number" step="0.01" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
-          </label>
-        </div>
-        <div class="text-[11px] text-mute -mt-1">
-          成本總額約 {{ fmtNT((cfgDraft.l2Shares||0) * (cfgDraft.l2CostPrice||0)) }}（僅套用於「依設定重置帳本」，不影響目前持倉）
+        <div class="text-[11px] text-mute -mt-1 leading-5">
+          正二 00631L 與其他個股一樣，請至下方「個股持倉（台股）」用代號 00631L 新增，系統即自動抓取即時股價計算市值與損益。
         </div>
         <div class="text-[11px] text-mute -mt-1 leading-5">
           現金部位不需填寫，系統自動計算：<b class="text-ink">總初始資本 − 正二成本 − 個股成本 − 微台保證金</b>。初始資本已含信貸資金，信貸僅另列為負債與槓桿計算。
@@ -611,8 +596,6 @@ try { localStorage.removeItem('lfdd_v1'); } catch (e) {}  // 清除舊版壞資�
 
 const DEFAULT_CFG = {
   totalCapital: 2100000,   // 總初始資本（現金部位 = 這個 − 所有持倉成本 − 微台保證金，自動算）
-  l2Shares:       38000,   // 正二 (00631L) 股數（真實持倉）
-  l2CostPrice:    36.29,   // 正二每股成本價（NT$，真實成本）
   tmfMargin:     200000,   // 微台每口「劃撥」保證金
   pointValue:        10,   // 微台每點價值
   maintMarginPerLot: 28000,// 每口原始/維持保證金估算基準
@@ -639,8 +622,6 @@ createApp({
       settingsOpen: false,
       /* 現金部位不再手動輸入，改由 computed cash 自動算：總資本 − 各持倉成本 − 微台保證金 + 已實現損益 */
       realizedPnl: 0,              // 微台平倉時的已實現損益累積（V轉全平時入帳）
-      /* 正二各筆持倉：shares+costPrice 為主（新制）；legacy amount+entryDelta 為即時價不可用時的估算備援 */
-      tranches: [{ id: 1, label: '初始配置', shares: DEFAULT_CFG.l2Shares, costPrice: DEFAULT_CFG.l2CostPrice, entryDelta: 0 }],
       /* 微台持倉：entry = 建倉點位，margin = 劃撥保證金 */
       tmf: [],
       flags: { buy1: false, buy2: false, tmf1: false, tmf2: false },
@@ -650,9 +631,8 @@ createApp({
       athMode: 'live',            // 'live' 盤中即時上修 / 'close' 收盤確認
       athModeDraft: 'live',
       feed: { ok: null, busy: false, msg: '尚未抓取，點 ↻ 立即更新或開啟自動更新' },
-      /* 正二 00631L 即時股價 */
-      l2: { price: 0, ok: false },
-      /* 台股個股持倉：{id, ticker, name, shares, costPrice, livePrice, ok} */
+      /* 台股個股持倉：{id, ticker, name, shares, costPrice, livePrice, ok}
+         正二 00631L 也是其中一員（用台股持倉新增），不再有獨立的正二資料結構 */
       stocks: [],
       addingStock: false,
       newStock: { ticker: '', name: '', shares: null, costPrice: null },
@@ -674,21 +654,9 @@ createApp({
         Object.assign(S.cfg, { ...DEFAULT_CFG, ...saved.cfg });
         Object.assign(S.cfgDraft, S.cfg);
         S.ath = saved.ath; S.idx = saved.idx; S.idxInput = String(saved.idx);
-        /* 重建正二持倉：初始配置一律以 cfg 的股數/成本價為準（設定頁可改）；補倉類保留 */
-        const cp = S.cfg.l2CostPrice > 0 ? S.cfg.l2CostPrice : 1;
-        S.tranches = (saved.tranches || []).map(t => {
-          if (t.label === '初始配置') {
-            return { id: 1, label: '初始配置', shares: S.cfg.l2Shares, costPrice: S.cfg.l2CostPrice, entryDelta: t.entryDelta || 0 };
-          }
-          if (t.shares != null) return t;
-          return { id: t.id || Date.now(), label: t.label, shares: Math.round((t.amount || 0) / cp), costPrice: cp, entryDelta: t.entryDelta || 0 };
-        });
-        if (!S.tranches.some(t => t.label === '初始配置')) {
-          S.tranches.unshift({ id: 1, label: '初始配置', shares: S.cfg.l2Shares, costPrice: S.cfg.l2CostPrice, entryDelta: 0 });
-        }
-        S.tmf = saved.tmf;
+        S.tmf = saved.tmf || [];
         if (typeof saved.realizedPnl === 'number') S.realizedPnl = saved.realizedPnl;
-        Object.assign(S.flags, saved.flags);
+        Object.assign(S.flags, saved.flags || {});
         if (typeof saved.auto === 'boolean') S.auto = saved.auto;
         if (saved.athMode) { S.athMode = saved.athMode; S.athModeDraft = saved.athMode; }
         if (Array.isArray(saved.stocks)) S.stocks = saved.stocks;
@@ -699,25 +667,34 @@ createApp({
     /* ─────────── 衍生數值 ─────────── */
     const dd = computed(() => S.ath ? (S.idx - S.ath) / S.ath * 100 : 0);
 
-    /* 正二市值：完全比照個股 —— 股數 × (即時股價 或 成本價)。不再使用 Δ% 估算。 */
-    const l2Value = computed(() =>
-      S.tranches.reduce((sum, t) => sum + t.shares * (S.l2.ok ? S.l2.price : t.costPrice), 0)
-    );
-    const l2Cost  = computed(() => S.tranches.reduce((s, t) => s + t.shares * t.costPrice, 0));
+    /* 正二 00631L：視為台股個股中 ticker 為 00631L 的持倉（可能多筆：初始 + 板機補倉） */
+    const L2_TICKER = '00631L';
+    const l2Lots  = computed(() => S.stocks.filter(s => s.ticker === L2_TICKER));
+    const l2Value = computed(() => l2Lots.value.reduce((sum, s) => sum + (s.ok ? s.livePrice : s.costPrice) * s.shares, 0));
+    const l2Cost  = computed(() => l2Lots.value.reduce((sum, s) => sum + s.costPrice * s.shares, 0));
     const l2Ret   = computed(() => l2Cost.value ? (l2Value.value / l2Cost.value - 1) * 100 : 0);
-    const l2SharesTotal = computed(() => S.tranches.reduce((s, t) => s + (t.shares || 0), 0));
+    const l2SharesTotal = computed(() => l2Lots.value.reduce((sum, s) => sum + (s.shares || 0), 0));
+    const l2Ok    = computed(() => l2Lots.value.length > 0 && l2Lots.value.every(s => s.ok));
+    const l2Price = computed(() => { const lot = l2Lots.value.find(s => s.ok); return lot ? lot.livePrice : 0; });
 
-    /* 板機補倉：以即時 00631L 股價換算股數（無即時價時退回成本價估算股數，仍維持股數制） */
-    function addL2Buy(label, amountNT, entryDelta) {
-      const price = (S.l2.ok && S.l2.price > 0) ? S.l2.price : S.cfg.l2CostPrice;
+    /* 板機補倉：往台股個股清單新增一筆 00631L（用即時股價換算股數，退回最近成本價） */
+    function addL2Buy(label, amountNT) {
+      const ref = l2Lots.value.find(s => s.ok) || l2Lots.value[0];
+      const price = (ref && ref.ok) ? ref.livePrice : (ref ? ref.costPrice : S.idx * 0.0008);
       const shares = Math.floor(amountNT / price);
-      S.tranches.push({ id: Date.now(), label, shares, costPrice: price, entryDelta });
+      S.stocks.push({ id: Date.now(), ticker: L2_TICKER, name: '元大台灣50正2 · ' + label, shares, costPrice: price, livePrice: price, ok: false });
     }
 
-    /* ─────────── 個股持倉（台股） ─────────── */
+    /* ─────────── 個股持倉（台股，含正二） ─────────── */
     const stockPnl    = s => (s.ok ? s.livePrice : s.costPrice) * s.shares - s.costPrice * s.shares;
     const stockPnlPct = s => s.costPrice ? ((s.ok ? s.livePrice : s.costPrice) / s.costPrice - 1) * 100 : 0;
     const stocksValue = computed(() => S.stocks.reduce((sum, s) => sum + (s.ok ? s.livePrice : s.costPrice) * s.shares, 0));
+
+    /* 非正二台股（供「個股市值(台股)」卡片顯示，排除 00631L 避免與正二卡片重複） */
+    const otherStocks = computed(() => S.stocks.filter(s => s.ticker !== L2_TICKER));
+    const otherStocksValue = computed(() => otherStocks.value.reduce((sum, s) => sum + (s.ok ? s.livePrice : s.costPrice) * s.shares, 0));
+    const otherStocksCost  = computed(() => otherStocks.value.reduce((sum, s) => sum + s.costPrice * s.shares, 0));
+    const otherStocksRet   = computed(() => otherStocksCost.value ? (otherStocksValue.value / otherStocksCost.value - 1) * 100 : 0);
     const stocksCost  = computed(() => S.stocks.reduce((sum, s) => sum + s.costPrice * s.shares, 0));
     const stocksRet   = computed(() => stocksCost.value ? (stocksValue.value / stocksCost.value - 1) * 100 : 0);
 
@@ -779,25 +756,26 @@ createApp({
     const combinedStocksCost = computed(() => stocksCost.value + usStocksCostTWD.value);
     const combinedStocksRet  = computed(() => combinedStocksCost.value ? ((stocksValue.value + usStocksValueTWD.value) / combinedStocksCost.value - 1) * 100 : 0);
 
-    /* 現金部位：不手動輸入，完全自動計算 = 總資本 − 正二成本 − 個股成本(台+美) − 微台已劃撥保證金 + 微台已實現損益 */
+    /* 現金部位 = 總資本 − 個股成本(台股含正二) − 美股成本 − 微台保證金 + 微台已實現損益 */
     const cash = computed(() =>
-      S.cfg.totalCapital - l2Cost.value - stocksCost.value - usStocksCostTWD.value - tmfMarginTotal.value + S.realizedPnl
+      S.cfg.totalCapital - stocksCost.value - usStocksCostTWD.value - tmfMarginTotal.value + S.realizedPnl
     );
 
-    const totalAsset  = computed(() => l2Value.value + stocksValue.value + usStocksValueTWD.value + cash.value + futuresEquity.value);
+    /* 總資產 = 台股個股市值(含正二) + 美股市值 + 現金 + 期貨權益 */
+    const totalAsset  = computed(() => stocksValue.value + usStocksValueTWD.value + cash.value + futuresEquity.value);
     const totalPnlPct = computed(() => (totalAsset.value / S.cfg.totalCapital - 1) * 100);
 
     /* 淨資產 = 總資產 − 信貸負債（初始資金已含信貸，扣掉借款即為真正屬於自己的資產） */
     const netWorth = computed(() => totalAsset.value - S.cfg.loanBalance);
 
-    /* 期貨名目曝險：每口名目值 = 進場點位 × 每點價值（微台每點 NT$10，一口名目約 = 點位×10×口數） */
+    /* 期貨名目曝險：每口名目值 = 進場點位 × 每點價值 */
     const futuresNotional = computed(() => S.tmf.reduce((s, L) => s + S.idx * S.cfg.pointValue, 0));
 
-    /* 總曝險：正二以 2 倍槓桿計實際市場曝險，加個股、期貨名目、現金 */
+    /* 總曝險：正二為 2 倍槓桿 ETF，其市場曝險是市值的 2 倍，故在「個股市值」基礎上再加一份正二市值。
+       總曝險 = 台股個股市值(含正二1倍) + 正二額外1倍 + 美股市值 + 期貨名目 + 現金 */
     const totalExposure = computed(() =>
-      l2Value.value * 2 + stocksValue.value + usStocksValueTWD.value + futuresNotional.value + cash.value
+      stocksValue.value + l2Value.value + usStocksValueTWD.value + futuresNotional.value + cash.value
     );
-    /* 總槓桿率 = 總曝險 ÷ 自有資金（淨資產）。淨資產 ≤ 0 時視為極高槓桿。 */
     const leverage = computed(() => netWorth.value > 0 ? totalExposure.value / netWorth.value : 0);
 
     const vTurnReady     = computed(() => S.tmf.length > 0 && S.idx >= S.ath - 1e-6);
@@ -825,16 +803,16 @@ createApp({
           desc: `動用現金部位 ${fmtNT(200000)} 買入正二。`,
           state: mkState(d <= -12, S.flags.buy1),
           blocked: (!S.flags.buy1 && d <= -12 && cash.value < 200000) ? '現金不足 NT$ 200,000' : '',
-          exec() { addL2Buy('補倉1', 200000, d); S.flags.buy1 = true; },
-          undo() { S.tranches = S.tranches.filter(t => t.label !== '補倉1'); S.flags.buy1 = false; }
+          exec() { addL2Buy('補倉1', 200000); S.flags.buy1 = true; },
+          undo() { S.stocks = S.stocks.filter(s => !(s.name || '').includes('補倉1')); S.flags.buy1 = false; }
         },
         {
           key: 'buy2', title: '正二補倉 2', threshold: -24, triggerPx: S.ath * 0.76,
           desc: `動用現金部位 ${fmtNT(300000)} 買入正二。`,
           state: mkState(d <= -24, S.flags.buy2),
           blocked: (!S.flags.buy2 && d <= -24 && cash.value < 300000) ? '現金不足 NT$ 300,000' : '',
-          exec() { addL2Buy('補倉2', 300000, d); S.flags.buy2 = true; },
-          undo() { S.tranches = S.tranches.filter(t => t.label !== '補倉2'); S.flags.buy2 = false; }
+          exec() { addL2Buy('補倉2', 300000); S.flags.buy2 = true; },
+          undo() { S.stocks = S.stocks.filter(s => !(s.name || '').includes('補倉2')); S.flags.buy2 = false; }
         },
         {
           key: 'tmf1', title: '微台第 1 扣板機', threshold: -25, triggerPx: S.ath * 0.75,
@@ -893,10 +871,11 @@ createApp({
       S.settingsOpen = false;
     }
     function resetLedger() {
-      if (!confirm('確定依目前設定重建帳本？將清空補倉與微台狀態（不影響下方個股/美股持倉清單）。')) return;
+      if (!confirm('確定依目前設定重建帳本？將清空板機補倉與微台狀態（不影響你手動新增的個股/美股持倉）。')) return;
       Object.assign(S.cfg, S.cfgDraft);
       S.realizedPnl = 0;
-      S.tranches = [{ id: 1, label: '初始配置', shares: S.cfg.l2Shares, costPrice: S.cfg.l2CostPrice, entryDelta: dd.value }];
+      /* 清掉板機自動補倉的 00631L（name 含「補倉」），保留手動持倉 */
+      S.stocks = S.stocks.filter(s => !(s.name || '').includes('補倉'));
       S.tmf = []; S.flags = { buy1: false, buy2: false, tmf1: false, tmf2: false };
       S.settingsOpen = false;
     }
@@ -1005,7 +984,7 @@ createApp({
       const proxies = proxyChain();
 
       /* ① 大盤＋正二 00631L＋台股個股：合併成一次 MIS 批次查詢，省請求數也更即時同步 */
-      const tickers = ['t00', '00631L', ...S.stocks.map(s => s.ticker)];
+      const tickers = ['t00', ...new Set(S.stocks.map(s => s.ticker))];
       const exCh = tickers.map(t => `tse_${t}.tw`).join('|');
       const misAttempts = proxies.map(p => ({
         label: `證交所即時（延遲約5秒·${p.tag}）`,
@@ -1019,13 +998,12 @@ createApp({
         const priceMap = result.map;
         const idxV = priceMap.get('t00');
         if (idxV) { applyFetched({ v: idxV, close: false }, label); indexDone = true; }
-        const l2V = priceMap.get('00631L');
-        if (l2V) { S.l2.price = l2V; S.l2.ok = true; } else { S.l2.ok = false; }
+        /* 正二 00631L 已在 stocks 內，由下方 forEach 統一更新即時價 */
         S.stocks.forEach(s => {
           const v = priceMap.get(s.ticker);
           if (v) { s.livePrice = v; s.ok = true; } else { s.ok = false; }
         });
-      } catch (e) { S.l2.ok = false; S.stocks.forEach(s => s.ok = false); }
+      } catch (e) { S.stocks.forEach(s => s.ok = false); }
 
       /* ② 大盤指數 fallback：MIS 批次整體失敗時，改走 Yahoo ^TWII → 官方收盤 */
       if (!indexDone) {
@@ -1105,18 +1083,9 @@ createApp({
       if (Date.now() - lastAutoFetch >= gap) { lastAutoFetch = Date.now(); fetchQuote(); }
     }, 5000);
 
-    /* 設定頁改正二股數/成本價時，即時同步「初始配置」持倉（不必按重置帳本） */
-    watch(
-      () => [S.cfg.l2Shares, S.cfg.l2CostPrice],
-      ([sh, cost]) => {
-        const t = S.tranches.find(x => x.label === '初始配置');
-        if (t) { t.shares = sh; t.costPrice = cost; }
-      }
-    );
-
     /* ─────────── LocalStorage 自動存檔 ─────────── */
     watch(
-      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, realizedPnl: S.realizedPnl, tranches: S.tranches, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode, stocks: S.stocks, usStocks: S.usStocks }),
+      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, realizedPnl: S.realizedPnl, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode, stocks: S.stocks, usStocks: S.usStocks }),
       json => localStorage.setItem(LS_KEY, json)
     );
 
@@ -1142,7 +1111,7 @@ createApp({
     function simulate(path, cfg) {
       /* 正二價格模型：l2AthP = ATH 時點的正二淨值；創高段用 ×2.25、回檔段用 ×1.85 */
       let ath = path[0], l2AthP = 1.0;
-      let units = cfg.l2Shares * cfg.l2CostPrice;  // 起始持倉成本（沙盒獨立運算，不影響實盤帳本）
+      let units = cfg.totalCapital * 0.65;  // 起始正二部位成本（沙盒獨立推演，約總資本 65%，不影響實盤帳本）
       let cash = cfg.totalCapital - units;          // 現金 = 總資本 − 初始正二成本（與實盤同一套推導邏輯）
       let lots = [], f = { b1: 0, b2: 0, t1: 0, t2: 0 };
       let holdUnits = cfg.totalCapital;   // 滿倉正二對照組
@@ -1266,7 +1235,8 @@ createApp({
     return {
       ...toRefs(S),
       dd, light, triggers, todayActions,
-      l2Value, l2Ret, l2SharesTotal, lotPnl, tmfPnl, tmfMarginTotal, futuresEquity, maintPct, cash,
+      l2Value, l2Ret, l2SharesTotal, l2Ok, l2Price, l2Cost, lotPnl, tmfPnl, tmfMarginTotal, futuresEquity, maintPct, cash,
+      otherStocks, otherStocksValue, otherStocksRet,
       addTmfManual, removeTmfLot,
       stockPnl, stockPnlPct, stocksValue, stocksRet, addStock, removeStock,
       usStockPnlTWD, usStockPnlPct, usStocksValueTWD, usStocksRet, addUsStock, removeUsStock,
