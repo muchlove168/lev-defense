@@ -3,763 +3,921 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>台股槓桿防禦系統 — Leveraged ETF & Futures Defense Dashboard</title>
+<title>台股槓桿防禦儀表板 | Leveraged ETF & Futures Defense Dashboard</title>
 
-<!-- ============ CDN 資源 ============ -->
+<!-- ===== CDN：Tailwind / Vue 3 / Chart.js / 字型 ===== -->
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/vue@3.4.27/dist/vue.global.prod.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet">
 
 <script>
-/* Tailwind 主題設定：TradingView 式深色金融配色（台股慣例：紅漲綠跌） */
+/* Tailwind 主題延伸：TradingView 式暗色金融配色 */
 tailwind.config = {
   theme: {
     extend: {
       colors: {
-        base:   '#0B0F17',   // 頁面底色
-        panel:  '#141A24',   // 卡片
-        panel2: '#1B2230',   // 卡片內層
-        line:   '#252D3D',   // 邊框
-        up:     '#F6465D',   // 紅漲（台股慣例）
-        dn:     '#2EBD85',   // 綠跌
-        warn:   '#F5B942',
-        info:   '#4C8DFF',
-        ink:    '#E6EAF2',
-        mut:    '#8A94A6'
+        base:   '#0a0e17',   // 頁面底色
+        panel:  '#111827e6', // 面板
+        card:   '#151d2b',   // 卡片
+        line:   '#1f2a3c',   // 邊框
+        ink:    '#d3dae8',   // 主文字
+        mute:   '#7c8ba3',   // 次要文字
+        up:     '#26a69a',   // 多方 / 安全
+        upsoft: '#26a69a22',
+        dn:     '#ef5350',   // 空方 / 危險
+        dnsoft: '#ef535022',
+        warn:   '#f0b90b',   // 預警
+        warnsoft:'#f0b90b1f',
+        blue:   '#3b82f6',
       },
       fontFamily: {
-        tc:   ['"Noto Sans TC"', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'monospace']
-      }
+        sans: ['"Noto Sans TC"', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'monospace'],
+      },
     }
   }
 }
 </script>
 
 <style>
-  body { background:#0B0F17; }
-  ::-webkit-scrollbar { width:8px; height:8px; }
-  ::-webkit-scrollbar-thumb { background:#252D3D; border-radius:4px; }
-  input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; }
-  .num { font-family:'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; }
-  .glow-red   { box-shadow:0 0 24px rgba(246,70,93,.25); }
-  .glow-amber { box-shadow:0 0 24px rgba(245,185,66,.20); }
-  .glow-green { box-shadow:0 0 24px rgba(46,189,133,.20); }
-  .fade-enter-active,.fade-leave-active{transition:opacity .2s}
-  .fade-enter-from,.fade-leave-to{opacity:0}
-  @media (prefers-reduced-motion: reduce){ *{transition:none!important;animation:none!important} }
+  html { scrollbar-color:#243049 #0d1320; }
+  body { background:
+      radial-gradient(1200px 500px at 80% -10%, #12233a55, transparent),
+      radial-gradient(900px 400px at -10% 110%, #0e2a2455, transparent),
+      #0a0e17;
+  }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#243049; border-radius:6px; }
+  ::-webkit-scrollbar-track { background:#0d1320; }
+
+  /* 招牌元素：Δ% 巨型讀數的呼吸光暈 */
+  .dd-glow-green { text-shadow:0 0 24px #26a69a66; }
+  .dd-glow-amber { text-shadow:0 0 24px #f0b90b66; }
+  .dd-glow-red   { text-shadow:0 0 26px #ef535088; animation:pulse-red 1.6s ease-in-out infinite; }
+  @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:.72} }
+  @media (prefers-reduced-motion: reduce){ .dd-glow-red{ animation:none } }
+
+  .num { font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums; }
+  [v-cloak]{ display:none }
 </style>
 </head>
 
-<body class="font-tc text-ink min-h-screen">
-<div id="app" class="max-w-7xl mx-auto px-3 sm:px-6 pb-16">
+<body class="text-ink font-sans min-h-screen">
+<div id="app" v-cloak>
 
-  <!-- ================= 頂部標題列 ================= -->
-  <header class="flex items-center justify-between py-4 border-b border-line sticky top-0 bg-base/95 backdrop-blur z-40">
-    <div>
-      <h1 class="text-lg sm:text-xl font-black tracking-wide">台股槓桿防禦系統
-        <span class="text-mut font-mono text-xs align-middle hidden sm:inline">LEV-DEFENSE v1.0</span>
-      </h1>
-      <p class="text-[11px] text-mut">00631L 正二 × 微台指 TMF ｜ 動態錨點回檔戰術引擎</p>
-    </div>
-    <div class="flex items-center gap-2">
-      <button @click="showSettings=true" title="系統設定"
-        class="w-9 h-9 rounded-lg bg-panel border border-line hover:border-info flex items-center justify-center text-mut hover:text-ink transition">⚙️</button>
+  <!-- ═══════════════ 模組 1：頂部控制與即時燈號 ═══════════════ -->
+  <header class="sticky top-0 z-40 backdrop-blur-md bg-base/85 border-b border-line">
+    <div class="max-w-7xl mx-auto px-4 py-3">
+      <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h1 class="text-lg sm:text-xl font-black tracking-wide truncate">
+            台股槓桿防禦儀表板
+            <span class="hidden sm:inline text-mute font-medium text-xs ml-2">00631L × 微台指 · Defense Console</span>
+          </h1>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <!-- 戰略狀態燈號 -->
+          <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold"
+               :class="light.chip">
+            <span class="text-sm leading-none">{{ light.icon }}</span>
+            <span class="hidden sm:inline">{{ light.label }}</span>
+          </div>
+          <button @click="settingsOpen=true" title="系統設定"
+                  class="w-9 h-9 grid place-items-center rounded-lg border border-line bg-card hover:bg-line/60 transition">
+            ⚙️
+          </button>
+        </div>
+      </div>
+
+      <!-- 控制列：點位輸入 / ATH / Δ% -->
+      <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch">
+
+        <!-- 大盤點位輸入 + 即時行情 -->
+        <div class="bg-card border border-line rounded-xl px-4 py-3">
+          <div class="flex items-center justify-between mb-1.5 gap-2">
+            <div class="text-[11px] text-mute font-bold tracking-widest">大盤現價（加權指數）</div>
+            <button @click="toggleAuto"
+                    class="text-[10px] font-black px-2 py-0.5 rounded-full border transition"
+                    :class="auto ? 'border-up/60 bg-upsoft text-up' : 'border-line text-mute hover:text-ink'">
+              {{ auto ? '⟳ 自動更新：開' : '⟳ 自動更新：關' }}
+            </button>
+          </div>
+          <div class="flex gap-2">
+            <input v-model="idxInput" @keyup.enter="applyIndex" type="number" inputmode="decimal"
+                   class="num w-full bg-base border border-line rounded-lg px-3 py-2 text-lg font-semibold focus:outline-none focus:border-up"
+                   placeholder="輸入指數點位">
+            <button @click="fetchNow" :disabled="feed.busy" title="立即抓取最新指數"
+                    class="px-3 rounded-lg border border-line bg-base hover:border-up/60 text-lg disabled:opacity-40 transition">
+              <span :class="feed.busy ? 'inline-block animate-spin' : ''">↻</span>
+            </button>
+            <button @click="applyIndex"
+                    class="px-4 rounded-lg bg-up/90 hover:bg-up text-base font-bold text-[#062b27] whitespace-nowrap transition">
+              套用
+            </button>
+          </div>
+          <div class="mt-1.5 text-[10px] leading-4 flex items-center gap-1.5">
+            <span :class="feed.ok===true ? 'text-up' : feed.ok===false ? 'text-dn' : 'text-mute'">●</span>
+            <span class="text-mute">{{ feed.msg }}</span>
+          </div>
+        </div>
+
+        <!-- ATH -->
+        <div class="bg-card border border-line rounded-xl px-4 py-3">
+          <div class="flex items-center justify-between mb-1.5">
+            <div class="text-[11px] text-mute font-bold tracking-widest">歷史最高點 ATH（自動鎖定牛市高點）</div>
+            <div class="flex gap-1">
+              <button @click="athEditing=!athEditing" class="text-[11px] px-2 py-0.5 rounded border border-line text-mute hover:text-ink transition">修正</button>
+              <button @click="resetAthToIndex" class="text-[11px] px-2 py-0.5 rounded border border-line text-mute hover:text-ink transition">以現價重置</button>
+            </div>
+          </div>
+          <div v-if="!athEditing" class="num text-2xl font-extrabold text-ink">{{ fmt(ath) }}</div>
+          <div v-else class="flex gap-2">
+            <input v-model.number="athDraft" type="number" class="num w-full bg-base border border-warn/60 rounded-lg px-3 py-1.5 text-lg focus:outline-none">
+            <button @click="saveAth" class="px-3 rounded-lg bg-warn text-base font-bold text-[#3a2c00]">確認</button>
+          </div>
+        </div>
+
+        <!-- Δ% 巨型讀數（招牌元素） -->
+        <div class="bg-card border rounded-xl px-4 py-2.5 flex items-center justify-between"
+             :class="light.borderCls">
+          <div>
+            <div class="text-[11px] text-mute font-bold tracking-widest">自高點回檔 Δ%</div>
+            <div class="num text-4xl font-extrabold leading-tight" :class="[light.textCls, light.glowCls]">
+              {{ dd >= 0 ? '+' : '' }}{{ dd.toFixed(2) }}<span class="text-xl">%</span>
+            </div>
+          </div>
+          <div class="text-right text-[11px] text-mute leading-5">
+            <div>現價 <span class="num text-ink font-bold">{{ fmt(idx) }}</span></div>
+            <div>距 ATH <span class="num font-bold" :class="dd<0?'text-dn':'text-up'">{{ fmt(idx - ath) }}</span> 點</div>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- ================= 全域戰報橫幅 ================= -->
-  <transition name="fade">
-  <div v-if="vTurnAlert" class="mt-4 rounded-xl border border-up bg-up/10 glow-red p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-    <div class="text-2xl">🏁</div>
-    <div class="flex-1">
-      <div class="font-black text-up">V 轉止盈戰報 — 微台指已回升至歷史高點</div>
-      <div class="text-sm text-mut">目前微台浮動損益 <b class="num text-ink">{{ fmt(microPnL) }}</b>，建議全數平倉止盈，純現金獲利轉回預備金。</div>
-    </div>
-    <button @click="executeVTurn" class="px-4 py-2 rounded-lg bg-up text-white font-bold hover:opacity-90">執行全數平倉</button>
-  </div>
-  </transition>
+  <main class="max-w-7xl mx-auto px-4 py-5 space-y-5">
 
-  <transition name="fade">
-  <div v-if="vaultAlert" class="mt-4 rounded-xl border border-warn bg-warn/10 glow-amber p-4 flex flex-col sm:flex-row sm:items-center gap-3">
-    <div class="text-2xl">🏦</div>
-    <div class="flex-1">
-      <div class="font-black text-warn">金庫重置提示 — 總資產已達初始資本 2 倍</div>
-      <div class="text-sm text-mut">目前總資產 <b class="num text-ink">{{ fmt(totalAssets) }}</b> ≥ {{ fmt(st.settings.initCapital*2) }}。建議單向頂部獲利抽離，補齊 30% 現金預備金。</div>
-    </div>
-    <button @click="st.dismissedVault=true" class="px-4 py-2 rounded-lg border border-warn text-warn font-bold hover:bg-warn/20">我知道了</button>
-  </div>
-  </transition>
-
-  <!-- ================= 模組 1：頂部控制與即時燈號 ================= -->
-  <section class="mt-5 grid grid-cols-1 lg:grid-cols-12 gap-4">
-
-    <!-- 點位輸入 -->
-    <div class="lg:col-span-4 rounded-xl bg-panel border border-line p-4">
-      <div class="text-xs text-mut mb-2 font-bold tracking-widest">大盤點位輸入 INDEX</div>
-      <div class="flex gap-2">
-        <input v-model.number="inputIndex" type="number" min="1" placeholder="輸入加權指數"
-          class="num flex-1 min-w-0 bg-panel2 border border-line rounded-lg px-3 py-2 text-xl font-bold focus:border-info outline-none">
-        <button @click="applyIndex" class="px-4 rounded-lg bg-info text-white font-bold hover:opacity-90 whitespace-nowrap">套用</button>
-      </div>
-      <div class="mt-3 flex items-center justify-between text-sm">
-        <span class="text-mut">目前點位</span>
-        <span class="num font-bold text-lg">{{ st.current.toLocaleString() }}</span>
-      </div>
-      <div class="mt-1 flex items-center justify-between text-sm">
-        <span class="text-mut">歷史最高點 ATH <span class="text-[10px]">(自動鎖定)</span></span>
-        <span class="flex items-center gap-2">
-          <span class="num font-bold text-lg text-warn">{{ st.ath.toLocaleString() }}</span>
-          <button @click="editATH" class="text-[11px] px-2 py-0.5 rounded border border-line text-mut hover:text-ink hover:border-info">修正</button>
-          <button @click="resetATH" class="text-[11px] px-2 py-0.5 rounded border border-line text-mut hover:text-ink hover:border-warn">重置</button>
-        </span>
-      </div>
-    </div>
-
-    <!-- 回檔大字 + 燈號 -->
-    <div class="lg:col-span-5 rounded-xl bg-panel border border-line p-4 flex flex-col justify-between"
-         :class="{'glow-green':light==='green','glow-amber':light==='yellow','glow-red':light==='red'}">
-      <div class="flex items-start justify-between">
-        <div>
-          <div class="text-xs text-mut font-bold tracking-widest">自高點回檔 DRAWDOWN Δ%</div>
-          <div class="num font-extrabold leading-none mt-1"
-               :class="delta < 0 ? 'text-dn' : 'text-up'"
-               style="font-size:clamp(2.6rem,6vw,4rem)">
-            {{ delta >= 0 ? '+' : '' }}{{ delta.toFixed(2) }}<span class="text-2xl">%</span>
-          </div>
-        </div>
-        <div class="text-right">
-          <div class="text-3xl">{{ lightEmoji }}</div>
-          <div class="text-xs font-bold mt-1" :class="lightTextClass">{{ lightLabel }}</div>
+    <!-- ═══ 全域戰報橫幅：V 轉止盈 / 金庫重置 / 資金警示 ═══ -->
+    <div v-if="vTurnReady" class="rounded-xl border border-up bg-upsoft px-4 py-3 flex flex-wrap items-center gap-3">
+      <span class="text-xl">🏁</span>
+      <div class="flex-1 min-w-[240px]">
+        <div class="font-black text-up">V 轉戰報：指數已回升至 ATH，微台全數平倉止盈！</div>
+        <div class="text-xs text-mute mt-0.5">
+          持倉 {{ tmf.length }} 口 · 浮動獲利 <span class="num font-bold text-up">{{ fmtNT(tmfPnl) }}</span>，平倉後純現金獲利與保證金全數轉回預備金。
         </div>
       </div>
-
-      <!-- 簽名元素：回檔軌道尺 (0% → -40%)，標出四道戰術觸發線 -->
-      <div class="mt-4">
-        <div class="relative h-3 rounded-full bg-panel2 overflow-visible"
-             style="background:linear-gradient(90deg,#2EBD8533 0%,#F5B94233 30%,#F6465D33 62%,#F6465D66 100%)">
-          <!-- 觸發線 -->
-          <div v-for="m in railMarks" :key="m.d"
-               class="absolute top-[-4px] h-[20px] w-[2px]" :style="{left: railPos(m.d)+'%', background:m.color}"
-               :title="m.label"></div>
-          <!-- 目前位置 -->
-          <div class="absolute top-[-7px] w-0 h-0 transition-all duration-300"
-               :style="{left:'calc('+railPos(Math.min(0,delta))+'% - 6px)'}"
-               style="border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid #E6EAF2"></div>
-        </div>
-        <div class="flex justify-between text-[10px] text-mut mt-1 num">
-          <span>0%</span><span class="text-warn">-12%</span><span class="text-warn">-24%</span><span class="text-up">-25%</span><span class="text-up">-35%</span><span>-40%</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 今日行動指引 -->
-    <div class="lg:col-span-3 rounded-xl bg-panel border border-line p-4">
-      <div class="text-xs text-mut font-bold tracking-widest mb-2">今日行動指引 TODAY</div>
-      <ul class="space-y-2 text-sm">
-        <li v-for="(g,i) in guidance" :key="i" class="flex gap-2">
-          <span>{{ g.icon }}</span><span :class="g.cls">{{ g.text }}</span>
-        </li>
-      </ul>
-    </div>
-  </section>
-
-  <!-- ================= 模組 2：戰術執行指示器 ================= -->
-  <section class="mt-4">
-    <div class="flex items-center justify-between mb-2">
-      <h2 class="font-black tracking-wide">戰術執行指示器 <span class="text-mut text-xs font-mono">TACTICAL ACTION ENGINE</span></h2>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-      <div v-for="a in tacticalCards" :key="a.key"
-           class="rounded-xl border p-4 bg-panel transition"
-           :class="a.state==='ready' ? 'border-up glow-red' : (a.state==='done' ? 'border-dn/60' : 'border-line')">
-        <div class="flex items-center justify-between">
-          <div class="font-bold">{{ a.title }}</div>
-          <span class="text-[11px] px-2 py-0.5 rounded-full font-bold"
-                :class="a.state==='ready' ? 'bg-up text-white' : (a.state==='done' ? 'bg-dn/20 text-dn' : 'bg-panel2 text-mut')">
-            {{ a.state==='ready' ? '可執行' : (a.state==='done' ? '已執行' : '未達標') }}
-          </span>
-        </div>
-        <div class="text-xs text-mut mt-2 leading-relaxed">{{ a.desc }}</div>
-        <div class="text-[11px] text-mut mt-1 num">觸發：Δ% ≤ {{ a.threshold }}%</div>
-        <button v-if="a.state==='ready'" @click="a.exec()"
-                :disabled="!a.affordable"
-                class="mt-3 w-full py-1.5 rounded-lg font-bold text-sm"
-                :class="a.affordable ? 'bg-up text-white hover:opacity-90' : 'bg-panel2 text-mut cursor-not-allowed'">
-          {{ a.affordable ? '執行' : '資金不足' }}
-        </button>
-        <div v-else-if="a.state==='done'" class="mt-3 text-center text-dn text-sm font-bold">✓ 完成</div>
-        <div v-else class="mt-3 text-center text-mut text-sm">待命中</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= 模組 3：資金結構與風險監控 ================= -->
-  <section class="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-4">
-
-    <!-- 資金明細 -->
-    <div class="lg:col-span-5 rounded-xl bg-panel border border-line p-4">
-      <h2 class="font-black tracking-wide mb-3">資金結構 <span class="text-mut text-xs font-mono">CAPITAL MONITOR</span></h2>
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between border-b border-line/60 pb-2">
-          <span class="text-mut">正二 00631L 市值（估算）</span><span class="num font-bold">{{ fmt(etfMV) }}</span>
-        </div>
-        <div class="flex justify-between border-b border-line/60 pb-2">
-          <span class="text-mut">美股流動資產剩餘</span><span class="num font-bold">{{ fmt(st.ledger.us) }}</span>
-        </div>
-        <div class="flex justify-between border-b border-line/60 pb-2">
-          <span class="text-mut">現金剩餘</span><span class="num font-bold">{{ fmt(st.ledger.cash) }}</span>
-        </div>
-        <div class="flex justify-between border-b border-line/60 pb-2">
-          <span class="text-mut">期貨專戶總額（含浮動損益）</span><span class="num font-bold">{{ fmt(futEquity) }}</span>
-        </div>
-        <div class="flex justify-between pt-1">
-          <span class="font-bold">當前總資產</span>
-          <span class="num font-extrabold text-lg">{{ fmt(totalAssets) }}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="font-bold">總損益</span>
-          <span class="num font-extrabold text-lg" :class="totalPnLPct>=0?'text-up':'text-dn'">
-            {{ totalPnLPct>=0?'+':'' }}{{ totalPnLPct.toFixed(2) }}%
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 環形圖 -->
-    <div class="lg:col-span-3 rounded-xl bg-panel border border-line p-4">
-      <div class="text-xs text-mut font-bold tracking-widest mb-2">資產配置比例</div>
-      <div class="relative h-56"><canvas id="allocChart"></canvas></div>
-    </div>
-
-    <!-- 微台風險計數器 -->
-    <div class="lg:col-span-4 rounded-xl bg-panel border p-4"
-         :class="microLots>0 ? (maintClass.border) : 'border-line'">
-      <h2 class="font-black tracking-wide mb-3">微台風險計數器 <span class="text-mut text-xs font-mono">TMF RISK</span></h2>
-      <template v-if="microLots>0">
-        <div class="grid grid-cols-2 gap-3 text-sm">
-          <div class="bg-panel2 rounded-lg p-3">
-            <div class="text-mut text-xs">持倉口數</div>
-            <div class="num font-extrabold text-xl">{{ microLots }} 口</div>
-          </div>
-          <div class="bg-panel2 rounded-lg p-3">
-            <div class="text-mut text-xs">微台浮動損益</div>
-            <div class="num font-extrabold text-xl" :class="microPnL>=0?'text-up':'text-dn'">{{ fmt(microPnL) }}</div>
-          </div>
-          <div class="bg-panel2 rounded-lg p-3 col-span-2">
-            <div class="flex justify-between items-end">
-              <div>
-                <div class="text-mut text-xs">帳戶維持率（原始保證金 {{ fmt(st.settings.maintBase) }}/口）</div>
-                <div class="num font-extrabold text-2xl" :class="maintClass.text">{{ maintRate.toFixed(0) }}%</div>
-              </div>
-              <div class="text-xs font-bold" :class="maintClass.text">{{ maintClass.label }}</div>
-            </div>
-          </div>
-        </div>
-        <div class="mt-3 space-y-1 text-xs text-mut">
-          <div v-for="(m,i) in st.micro" :key="i" class="flex justify-between num">
-            <span>第 {{ i+1 }} 口 ｜ 建倉點 {{ Math.round(m.entryIndex).toLocaleString() }}</span>
-            <span :class="(st.current-m.entryIndex)>=0?'text-up':'text-dn'">{{ fmt((st.current-m.entryIndex)*10*m.lots) }}</span>
-          </div>
-        </div>
-      </template>
-      <div v-else class="text-mut text-sm h-40 flex items-center justify-center text-center">
-        目前無微台持倉。<br>當回檔 ≤ -25% 時將啟動第一道扣板機。
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= 模組 4：歷史劇本與情境模擬器 ================= -->
-  <section class="mt-6 rounded-xl bg-panel border border-line p-4">
-    <h2 class="font-black tracking-wide mb-1">歷史劇本與情境模擬器 <span class="text-mut text-xs font-mono">SCENARIO SANDBOX</span></h2>
-    <p class="text-xs text-mut mb-3">沙盒模擬不會影響上方實盤狀態。以目前 ATH {{ st.ath.toLocaleString() }} 為基準點推演。</p>
-    <div class="flex flex-wrap gap-2">
-      <button v-for="s in scenarioDefs" :key="s.key" @click="runScenario(s)"
-        class="px-4 py-2 rounded-lg border font-bold text-sm transition"
-        :class="activeScenario===s.key ? 'bg-info text-white border-info' : 'bg-panel2 border-line text-ink hover:border-info'">
-        {{ s.label }}
+      <button @click="closeTmfAll" class="px-4 py-2 rounded-lg bg-up text-[#062b27] font-black hover:brightness-110 transition">
+        一鍵平倉 → 轉回預備金
       </button>
     </div>
 
-    <div v-if="simResult" class="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
-      <!-- 對比卡片 -->
-      <div class="lg:col-span-4 space-y-3">
-        <div class="rounded-xl bg-panel2 border border-info/50 p-4">
-          <div class="text-xs text-mut font-bold">🛡️ 防禦系統最終資產</div>
-          <div class="num font-extrabold text-2xl mt-1">{{ fmt(simResult.finalDef) }}</div>
-          <div class="num text-sm font-bold" :class="simResult.defPct>=0?'text-up':'text-dn'">
-            {{ simResult.defPct>=0?'+':'' }}{{ simResult.defPct.toFixed(2) }}%
-          </div>
-        </div>
-        <div class="rounded-xl bg-panel2 border border-line p-4">
-          <div class="text-xs text-mut font-bold">🚀 滿倉正二對照組</div>
-          <div class="num font-extrabold text-2xl mt-1">{{ fmt(simResult.finalFull) }}</div>
-          <div class="num text-sm font-bold" :class="simResult.fullPct>=0?'text-up':'text-dn'">
-            {{ simResult.fullPct>=0?'+':'' }}{{ simResult.fullPct.toFixed(2) }}%
-          </div>
-        </div>
-        <div class="rounded-xl p-4 border"
-             :class="simResult.finalDef>=simResult.finalFull ? 'border-dn bg-dn/10' : 'border-warn bg-warn/10'">
-          <div class="text-xs font-bold" :class="simResult.finalDef>=simResult.finalFull ? 'text-dn' : 'text-warn'">
-            {{ simResult.finalDef>=simResult.finalFull ? '✅ 防禦系統勝出' : '⚠️ 滿倉正二勝出' }}
-          </div>
-          <div class="num font-bold mt-1">差額 {{ fmt(Math.abs(simResult.finalDef-simResult.finalFull)) }}</div>
-        </div>
-        <!-- 戰報 -->
-        <div class="rounded-xl bg-panel2 border border-line p-3 max-h-44 overflow-y-auto">
-          <div class="text-xs text-mut font-bold mb-1">📜 模擬戰報</div>
-          <div v-for="(e,i) in simResult.events" :key="i" class="text-xs text-mut py-0.5 border-b border-line/40 last:border-0">{{ e }}</div>
-          <div v-if="!simResult.events.length" class="text-xs text-mut">此路徑未觸發任何戰術動作。</div>
-        </div>
-      </div>
-      <!-- 曲線圖 -->
-      <div class="lg:col-span-8 rounded-xl bg-panel2 border border-line p-3">
-        <div class="text-xs text-mut font-bold mb-2">資產曲線對比（防禦系統 vs 滿倉正二）</div>
-        <div class="relative h-72 sm:h-80"><canvas id="simChart"></canvas></div>
+    <div v-if="vaultResetReady" class="rounded-xl border border-warn bg-warnsoft px-4 py-3 flex items-center gap-3">
+      <span class="text-xl">🏦</span>
+      <div>
+        <div class="font-black text-warn">金庫重置提醒：總資產已達初始資本 2 倍（{{ fmtNT(cfg.totalCapital*2) }}）</div>
+        <div class="text-xs text-mute mt-0.5">建議執行「單向頂部獲利抽離」：僅賣出、不再投入，將獲利抽出補齊至 30% 現金預備金水位。</div>
       </div>
     </div>
-  </section>
 
-  <!-- ================= 系統設定 Modal ================= -->
-  <transition name="fade">
-  <div v-if="showSettings" class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" @click.self="showSettings=false">
-    <div class="w-full max-w-md rounded-2xl bg-panel border border-line p-5 max-h-[90vh] overflow-y-auto">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="font-black">⚙️ 系統設定</h3>
-        <button @click="showSettings=false" class="text-mut hover:text-ink">✕</button>
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+      <!-- ═══════════════ 模組 2：戰術執行指示器 ═══════════════ -->
+      <section class="lg:col-span-5 space-y-4">
+        <div class="bg-card border border-line rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-black tracking-wide">⚔️ 戰術執行指示器</h2>
+            <span class="text-[11px] text-mute">觸發基準：ATH {{ fmt(ath) }}</span>
+          </div>
+
+          <div class="space-y-3">
+            <div v-for="t in triggers" :key="t.key"
+                 class="rounded-xl border px-4 py-3 transition"
+                 :class="t.state==='可執行' ? 'border-warn bg-warnsoft'
+                        : t.state==='已執行' ? 'border-up/50 bg-upsoft'
+                        : 'border-line bg-base/40'">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="font-bold text-sm flex items-center gap-2 flex-wrap">
+                    {{ t.title }}
+                    <span class="num text-[11px] px-1.5 py-0.5 rounded bg-base border border-line text-mute">
+                      Δ ≤ {{ t.threshold }}% · 觸發價 {{ fmt(t.triggerPx) }}
+                    </span>
+                  </div>
+                  <div class="text-xs text-mute mt-1 leading-5">{{ t.desc }}</div>
+                  <div v-if="t.blocked" class="text-[11px] text-dn mt-1">⛔ {{ t.blocked }}</div>
+                </div>
+                <span class="shrink-0 text-[11px] font-black px-2 py-1 rounded-md"
+                      :class="t.state==='可執行' ? 'bg-warn text-[#3a2c00]'
+                             : t.state==='已執行' ? 'bg-up text-[#062b27]'
+                             : 'bg-line text-mute'">
+                  {{ t.state }}
+                </span>
+              </div>
+              <div class="mt-2 flex gap-2" v-if="t.state!=='未達標'">
+                <button v-if="t.state==='可執行'" @click="t.exec()" :disabled="!!t.blocked"
+                        class="text-xs font-bold px-3 py-1.5 rounded-lg bg-warn text-[#3a2c00] disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition">
+                  標記已執行
+                </button>
+                <button v-if="t.state==='已執行'" @click="t.undo()"
+                        class="text-xs px-3 py-1.5 rounded-lg border border-line text-mute hover:text-ink transition">
+                  撤銷
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 今日行動指引 -->
+        <div class="bg-card border border-line rounded-2xl p-4">
+          <h2 class="font-black tracking-wide mb-3">🧭 今天開盤：該做 / 不該做</h2>
+          <div class="space-y-2">
+            <div v-for="(a,i) in todayActions.do" :key="'d'+i"
+                 class="text-sm leading-6 rounded-lg bg-upsoft border border-up/30 px-3 py-2">✅ {{ a }}</div>
+            <div v-for="(a,i) in todayActions.dont" :key="'n'+i"
+                 class="text-sm leading-6 rounded-lg bg-dnsoft border border-dn/30 px-3 py-2">🚫 {{ a }}</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════ 模組 3：資金結構與風險監控 ═══════════════ -->
+      <section class="lg:col-span-7 space-y-4">
+        <div class="bg-card border border-line rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-black tracking-wide">💰 資金結構與風險監控</h2>
+            <div class="text-xs">
+              總損益
+              <span class="num font-black text-base ml-1" :class="totalPnlPct>=0?'text-up':'text-dn'">
+                {{ totalPnlPct>=0?'+':'' }}{{ totalPnlPct.toFixed(2) }}%
+              </span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
+              <div class="text-[11px] text-mute font-bold">正二市值（估）</div>
+              <div class="num font-extrabold text-lg">{{ fmtNT(l2Value) }}</div>
+              <div class="text-[11px] num" :class="l2Ret>=0?'text-up':'text-dn'">{{ l2Ret>=0?'+':'' }}{{ l2Ret.toFixed(2) }}%</div>
+            </div>
+            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
+              <div class="text-[11px] text-mute font-bold">美股流動資產</div>
+              <div class="num font-extrabold text-lg">{{ fmtNT(us) }}</div>
+            </div>
+            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
+              <div class="text-[11px] text-mute font-bold">現金預備金</div>
+              <div class="num font-extrabold text-lg">{{ fmtNT(cash) }}</div>
+            </div>
+            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5">
+              <div class="text-[11px] text-mute font-bold">期貨專戶（權益）</div>
+              <div class="num font-extrabold text-lg">{{ fmtNT(futuresEquity) }}</div>
+              <div class="text-[11px] text-mute num">保證金 {{ fmtNT(tmfMarginTotal) }}</div>
+            </div>
+            <div class="rounded-xl bg-base/50 border border-line px-3 py-2.5 col-span-2 sm:col-span-2">
+              <div class="text-[11px] text-mute font-bold">當前總資產</div>
+              <div class="num font-black text-2xl" :class="totalPnlPct>=0?'text-up':'text-dn'">{{ fmtNT(totalAsset) }}</div>
+              <div class="text-[11px] text-mute">初始資本 {{ fmtNT(cfg.totalCapital) }}</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+            <!-- 環形圖 -->
+            <div class="relative h-56">
+              <canvas id="allocChart"></canvas>
+              <div class="absolute inset-0 grid place-items-center pointer-events-none">
+                <div class="text-center">
+                  <div class="text-[10px] text-mute font-bold tracking-widest">TOTAL</div>
+                  <div class="num font-black text-sm">{{ fmtNT(totalAsset) }}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 微台風險計數器 -->
+            <div class="rounded-xl border border-line bg-base/50 p-3">
+              <div class="font-bold text-sm mb-2">🎯 微台風險計數器</div>
+              <template v-if="tmf.length">
+                <div class="space-y-1.5 text-xs">
+                  <div v-for="(L,i) in tmf" :key="L.id" class="flex justify-between num">
+                    <span class="text-mute">第 {{ i+1 }} 口 @ {{ fmt(L.entry) }}</span>
+                    <span :class="lotPnl(L)>=0?'text-up':'text-dn'">{{ lotPnl(L)>=0?'+':'' }}{{ fmtNT(lotPnl(L)) }}</span>
+                  </div>
+                  <div class="border-t border-line pt-1.5 flex justify-between font-bold num">
+                    <span>浮動損益合計</span>
+                    <span :class="tmfPnl>=0?'text-up':'text-dn'">{{ tmfPnl>=0?'+':'' }}{{ fmtNT(tmfPnl) }}</span>
+                  </div>
+                  <div class="flex justify-between font-bold">
+                    <span>帳戶維持率</span>
+                    <span class="num" :class="maintPct>=500?'text-up':maintPct>=200?'text-warn':'text-dn'">{{ maintPct.toFixed(0) }}%</span>
+                  </div>
+                </div>
+                <div class="mt-2 text-[11px] rounded-lg px-2.5 py-1.5"
+                     :class="maintPct>=500?'bg-upsoft text-up':maintPct>=200?'bg-warnsoft text-warn':'bg-dnsoft text-dn'">
+                  {{ maintPct>=500 ? '🛡️ 維持率 > 500%，安全水位充足。'
+                     : maintPct>=200 ? '⚠️ 維持率 200%~500%，留意波動、備妥補繳資金。'
+                     : '🚨 維持率 < 200%，接近風險區：評估補繳保證金或減倉。' }}
+                </div>
+              </template>
+              <div v-else class="text-xs text-mute leading-6">
+                目前無微台持倉。<br>
+                第 1 口板機：Δ ≤ −25%（{{ fmt(ath*0.75) }}）<br>
+                第 2 口板機：Δ ≤ −35%（{{ fmt(ath*0.65) }}）<br>
+                每口維持保證金以 {{ fmtNT(cfg.maintMarginPerLot) }} 估算。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════ 模組 4：歷史劇本與情境模擬器 ═══════════════ -->
+    <section class="bg-card border border-line rounded-2xl p-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h2 class="font-black tracking-wide">🎬 歷史劇本與情境模擬器 <span class="text-[11px] text-mute font-medium">（沙盒推演，不影響上方實盤帳本）</span></h2>
+        <div class="flex flex-wrap gap-2">
+          <button v-for="s in scenarioDefs" :key="s.key" @click="runScenario(s.key)"
+                  class="text-xs font-bold px-3 py-2 rounded-lg border transition"
+                  :class="scen && scen.key===s.key ? 'bg-blue text-white border-blue' : 'border-line bg-base/60 hover:border-blue/60'">
+            {{ s.label }}
+          </button>
+        </div>
       </div>
-      <div class="space-y-3 text-sm">
-        <label class="block" v-for="f in settingFields" :key="f.key">
-          <span class="text-mut text-xs">{{ f.label }}</span>
-          <input v-model.number="draft[f.key]" type="number"
-            class="num mt-1 w-full bg-panel2 border border-line rounded-lg px-3 py-2 focus:border-info outline-none">
+
+      <div v-if="scen" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 h-72 rounded-xl border border-line bg-base/40 p-2">
+          <canvas id="scenChart"></canvas>
+        </div>
+        <div class="space-y-3">
+          <div class="rounded-xl border border-blue/40 bg-blue/10 px-4 py-3">
+            <div class="text-[11px] text-mute font-bold">防禦策略（本系統）</div>
+            <div class="num font-black text-xl">{{ fmtNT(scen.strat.final) }}</div>
+            <div class="text-xs num" :class="scen.strat.ret>=0?'text-up':'text-dn'">
+              報酬 {{ scen.strat.ret>=0?'+':'' }}{{ scen.strat.ret.toFixed(2) }}% · 最大回撤 {{ scen.strat.maxDD.toFixed(2) }}%
+            </div>
+          </div>
+          <div class="rounded-xl border border-line bg-base/50 px-4 py-3">
+            <div class="text-[11px] text-mute font-bold">對照組：滿倉正二（{{ fmtNT(cfg.totalCapital) }} All-in）</div>
+            <div class="num font-black text-xl">{{ fmtNT(scen.hold.final) }}</div>
+            <div class="text-xs num" :class="scen.hold.ret>=0?'text-up':'text-dn'">
+              報酬 {{ scen.hold.ret>=0?'+':'' }}{{ scen.hold.ret.toFixed(2) }}% · 最大回撤 {{ scen.hold.maxDD.toFixed(2) }}%
+            </div>
+          </div>
+          <div class="rounded-xl px-4 py-3 border"
+               :class="scen.diff>=0 ? 'border-up/50 bg-upsoft' : 'border-dn/50 bg-dnsoft'">
+            <div class="text-[11px] font-bold" :class="scen.diff>=0?'text-up':'text-dn'">策略 vs 滿倉正二</div>
+            <div class="num font-black text-lg" :class="scen.diff>=0?'text-up':'text-dn'">
+              {{ scen.diff>=0?'領先 +':'落後 ' }}{{ fmtNT(scen.diff) }}
+            </div>
+            <div class="text-[11px] text-mute mt-1 leading-5">{{ scen.note }}</div>
+          </div>
+        </div>
+      </div>
+      <div v-else class="text-sm text-mute py-6 text-center">選擇一個劇本，一鍵推演「防禦策略」與「滿倉正二」的資產曲線對比。</div>
+    </section>
+
+    <footer class="text-[11px] text-mute text-center pb-6 leading-5">
+      正二變動率為估算（下跌 ×1.85 / 上漲 ×2.25），非精確追蹤；微台每點 NT$ {{ cfg.pointValue }}。<br>
+      指數來源：證交所即時行情（約 5 秒延遲，經 CORS 代理）→ Yahoo ^TWII 備援 → 證交所官方收盤 API；代理暫時失效時請改用手動輸入。<br>
+      本工具僅供個人策略紀律推演，不構成任何投資建議。資料自動儲存於本機瀏覽器（LocalStorage）。
+    </footer>
+  </main>
+
+  <!-- ═══════════════ 模組 5：系統設定 Modal ═══════════════ -->
+  <div v-if="settingsOpen" class="fixed inset-0 z-50 grid place-items-center p-4">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" @click="settingsOpen=false"></div>
+    <div class="relative w-full max-w-md bg-card border border-line rounded-2xl p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="font-black">⚙️ 系統設定</h3>
+        <button @click="settingsOpen=false" class="text-mute hover:text-ink">✕</button>
+      </div>
+      <div class="grid grid-cols-1 gap-3 text-sm">
+        <label class="space-y-1">
+          <span class="text-[11px] text-mute font-bold">總初始資本 (NT$)</span>
+          <input v-model.number="cfgDraft.totalCapital" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+        </label>
+        <label class="space-y-1">
+          <span class="text-[11px] text-mute font-bold">正二 (00631L) 初始配額 (NT$)</span>
+          <input v-model.number="cfgDraft.l2Initial" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="space-y-1">
+            <span class="text-[11px] text-mute font-bold">美股流動資產 (NT$)</span>
+            <input v-model.number="cfgDraft.usInitial" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-mute font-bold">現金預備金 (NT$)</span>
+            <input v-model.number="cfgDraft.cashInitial" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="space-y-1">
+            <span class="text-[11px] text-mute font-bold">微台每口劃撥保證金 (NT$)</span>
+            <input v-model.number="cfgDraft.tmfMargin" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-mute font-bold">每口維持保證金 (NT$)</span>
+            <input v-model.number="cfgDraft.maintMarginPerLot" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+          </label>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="space-y-1">
+            <span class="text-[11px] text-mute font-bold">ATH 更新模式</span>
+            <select v-model="athModeDraft" class="w-full bg-base border border-line rounded-lg px-3 py-2">
+              <option value="live">盤中創高即時上修</option>
+              <option value="close">僅收盤後確認上修</option>
+            </select>
+          </label>
+          <label class="space-y-1">
+            <span class="text-[11px] text-mute font-bold">自動更新間隔 (秒)</span>
+            <input v-model.number="cfgDraft.pollSec" type="number" min="10" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+          </label>
+        </div>
+        <label class="space-y-1">
+          <span class="text-[11px] text-mute font-bold">自建代理 Worker 網址（選填，設定後優先使用，穩定度最佳）</span>
+          <input v-model.trim="cfgDraft.workerUrl" type="url" placeholder="https://你的名稱.workers.dev"
+                 class="num w-full bg-base border border-line rounded-lg px-3 py-2 text-xs">
         </label>
       </div>
-      <div class="mt-5 space-y-2">
-        <button @click="saveSettings(false)" class="w-full py-2 rounded-lg bg-info text-white font-bold hover:opacity-90">儲存參數（保留目前部位）</button>
-        <button @click="saveSettings(true)" class="w-full py-2 rounded-lg border border-up text-up font-bold hover:bg-up/10">儲存並重置整個系統</button>
-        <p class="text-[11px] text-mut">「重置」會依新參數重新初始化所有部位、帳本與執行狀態，並清除 LocalStorage 紀錄。</p>
+      <div class="flex flex-wrap gap-2 pt-1">
+        <button @click="saveSettings" class="flex-1 px-4 py-2 rounded-lg bg-up text-[#062b27] font-black hover:brightness-110 transition">儲存設定</button>
+        <button @click="resetLedger" class="px-4 py-2 rounded-lg border border-warn/60 text-warn text-sm font-bold hover:bg-warnsoft transition">依設定重置帳本</button>
+        <button @click="wipeAll" class="px-4 py-2 rounded-lg border border-dn/60 text-dn text-sm font-bold hover:bg-dnsoft transition">清除全部資料</button>
       </div>
+      <p class="text-[11px] text-mute leading-5">「儲存設定」僅更新參數；「依設定重置帳本」會依上方金額重建 正二/美股/現金 帳本並清空戰術狀態。</p>
     </div>
   </div>
-  </transition>
 
-  <footer class="mt-8 text-center text-[11px] text-mut">
-    正二估算為近似模型（下跌 ×1.85 / 上漲 ×2.25），非實際淨值；本工具僅供個人資金紀律管理，不構成投資建議。
-  </footer>
 </div>
 
 <script>
-/* =====================================================================
- *  台股槓桿防禦系統 — 核心邏輯
- *  模型說明：
- *   - ATH 動態錨點：套用點位時自動 ATH = max(ATH, 點位)
- *   - Δ% = (現價 - ATH) / ATH × 100
- *   - 正二估算因子 F(Δ) = 1 + (Δ<0 ? Δ×1.85 : Δ×2.25)/100
- *   - 以「單位淨值」uATH 追蹤正二：ATH 上移時 uATH ×= 1 + 漲幅×2.25，
- *     回檔期間單位淨值 = uATH × F(Δ)。每筆買入以當下單位淨值換算 units，
- *     使不同回檔深度的加碼部位能正確累計損益。
- * ===================================================================== */
-const { createApp, reactive, ref, computed, watch, onMounted, nextTick } = Vue;
+/* ═══════════════════════════════════════════════════════════════
+   台股槓桿防禦儀表板 — 核心邏輯
+   模型摘要：
+   · Δ% = (現價 − ATH) / ATH × 100，ATH 隨創高自動上修
+   · 正二估算變動率 R：下跌 Δ×1.85、上漲 Δ×2.25（相對 ATH 時點）
+   · 各筆正二 tranche 以「進場時 Δ」換算相對淨值，估算現值
+   · 微台為多方防禦倉：每點 NT$10，V 轉回 ATH 全數止盈
+   ═══════════════════════════════════════════════════════════════ */
+const { createApp, reactive, toRefs, computed, watch, onMounted, nextTick } = Vue;
 
-const LS_KEY = 'levDefenseDashboard_v1';
+const LS_KEY = 'lfdd_v1';
 
-const DEFAULT_SETTINGS = {
-  initCapital: 2100000,   // 總初始資本
-  etfAlloc:    1400000,   // 正二初始配額
-  usInit:       250000,   // 美股流動資產
-  cashInit:     450000,   // 現金
-  tmfMargin:    200000,   // 微台每口劃撥保證金
-  maintBase:     28000    // 每口原始保證金（維持率分母）
+const DEFAULT_CFG = {
+  totalCapital: 2100000,   // 總初始資本
+  l2Initial:    1400000,   // 正二初始配額
+  usInitial:     250000,   // 美股流動資產
+  cashInitial:   450000,   // 現金預備金
+  tmfMargin:     200000,   // 微台每口「劃撥」保證金
+  pointValue:        10,   // 微台每點價值
+  maintMarginPerLot: 28000,// 每口原始/維持保證金估算基準
+  pollSec:           15,   // 盤中自動更新間隔（秒），證交所限流每5秒3次，勿低於10
+  workerUrl:         ''    // 自建 Cloudflare Worker 代理網址（選填，設定後優先使用）
 };
 
-/* 正二估算因子 */
-function F(deltaPct){
-  return 1 + (deltaPct < 0 ? deltaPct * 1.85 : deltaPct * 2.25) / 100;
-}
-
-function freshState(settings){
-  const s = { ...settings };
-  return {
-    settings: s,
-    ath: 23000,
-    current: 23000,
-    uATH: 1,
-    /* 初始正二部位視為在 ATH（Δ=0）建立 */
-    etfPositions: [{ units: s.etfAlloc, label: '初始配置', amount: s.etfAlloc }],
-    micro: [],                                  // {entryIndex, lots}
-    ledger: { us: s.usInit, cash: s.cashInit, futDeposit: 0 },
-    actions: { buy1:'pending', buy2:'pending', tmf1:'pending', tmf2:'pending' },
-    dismissedVault: false
-  };
-}
+/* 正二估算變動率（％），d 為 Δ%（可正可負） */
+const R = d => d < 0 ? d * 1.85 : d * 2.25;
+/* 由 Δ% 反推正二相對淨值（ATH 時點 = 1.0） */
+const l2Rel = d => 1 + R(d) / 100;
 
 createApp({
-  setup(){
-    /* ---------- 狀態載入（LocalStorage） ---------- */
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch(e){ saved = null; }
-    const st = reactive(saved && saved.settings ? saved : freshState(DEFAULT_SETTINGS));
-
-    const inputIndex   = ref(st.current);
-    const showSettings = ref(false);
-    const draft        = reactive({ ...st.settings });
-    const activeScenario = ref(null);
-    const simResult    = ref(null);
-
-    /* ---------- 自動儲存 ---------- */
-    let saveTimer = null;
-    watch(st, () => {
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => localStorage.setItem(LS_KEY, JSON.stringify(st)), 300);
-    }, { deep: true });
-
-    /* ---------- 基礎計算 ---------- */
-    /* 四捨五入至 6 位小數，避免浮點誤差（如 -11.999999999%）漏觸發 -12% 門檻 */
-    const round6 = v => Math.round(v * 1e6) / 1e6;
-    const delta = computed(() => round6((st.current - st.ath) / st.ath * 100));
-    const unitNow = computed(() => st.uATH * F(Math.min(0, delta.value)));  // 現價=ATH 時 Δ=0
-
-    const etfMV = computed(() =>
-      st.etfPositions.reduce((a,p) => a + p.units, 0) * unitNow.value
-    );
-    const microLots = computed(() => st.micro.reduce((a,m)=>a+m.lots,0));
-    const microPnL  = computed(() => st.micro.reduce((a,m)=>a+(st.current-m.entryIndex)*10*m.lots,0));
-    const futEquity = computed(() => st.ledger.futDeposit + microPnL.value);
-    const totalAssets = computed(() => etfMV.value + st.ledger.us + st.ledger.cash + futEquity.value);
-    const totalPnLPct = computed(() => (totalAssets.value - st.settings.initCapital) / st.settings.initCapital * 100);
-
-    /* 維持率 = 期貨權益 / (原始保證金 × 口數) */
-    const maintRate = computed(() =>
-      microLots.value === 0 ? 0 : futEquity.value / (st.settings.maintBase * microLots.value) * 100
-    );
-    const maintClass = computed(() => {
-      const r = maintRate.value;
-      if (r > 500) return { text:'text-dn',   border:'border-dn glow-green',  label:'✔ 安全（>500%）' };
-      if (r > 300) return { text:'text-warn', border:'border-warn glow-amber',label:'△ 注意（300–500%）' };
-      return             { text:'text-up',   border:'border-up glow-red',    label:'✖ 危險（<300%）需補保證金' };
+  setup() {
+    /* ─────────── 狀態 ─────────── */
+    const S = reactive({
+      cfg: { ...DEFAULT_CFG },
+      cfgDraft: { ...DEFAULT_CFG },
+      ath: 24000,
+      idx: 24000,
+      idxInput: '24000',
+      athEditing: false,
+      athDraft: 24000,
+      settingsOpen: false,
+      us: DEFAULT_CFG.usInitial,
+      cash: DEFAULT_CFG.cashInitial,
+      /* 正二各筆持倉：entryDelta = 進場當下的 Δ% */
+      tranches: [{ id: 1, label: '初始配置', amount: DEFAULT_CFG.l2Initial, entryDelta: 0 }],
+      /* 微台持倉：entry = 建倉點位，margin = 劃撥保證金 */
+      tmf: [],
+      flags: { buy1: false, buy2: false, tmf1: false, tmf2: false },
+      scen: null,
+      /* 即時行情 */
+      auto: true,                 // 自動更新開關
+      athMode: 'live',            // 'live' 盤中即時上修 / 'close' 收盤確認
+      athModeDraft: 'live',
+      feed: { ok: null, busy: false, msg: '尚未抓取，點 ↻ 立即更新或開啟自動更新' }
     });
 
-    /* ---------- 燈號 ---------- */
+    /* ─────────── 讀取 LocalStorage ─────────── */
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+      if (saved && saved.cfg) {
+        Object.assign(S.cfg, { ...DEFAULT_CFG, ...saved.cfg });
+        Object.assign(S.cfgDraft, S.cfg);
+        S.ath = saved.ath; S.idx = saved.idx; S.idxInput = String(saved.idx);
+        S.athDraft = saved.ath;
+        S.us = saved.us; S.cash = saved.cash;
+        S.tranches = saved.tranches; S.tmf = saved.tmf;
+        Object.assign(S.flags, saved.flags);
+        if (typeof saved.auto === 'boolean') S.auto = saved.auto;
+        if (saved.athMode) { S.athMode = saved.athMode; S.athModeDraft = saved.athMode; }
+      }
+    } catch (e) { console.warn('讀取存檔失敗，使用預設值', e); }
+
+    /* ─────────── 衍生數值 ─────────── */
+    const dd = computed(() => S.ath ? (S.idx - S.ath) / S.ath * 100 : 0);
+
+    const l2Value = computed(() =>
+      S.tranches.reduce((sum, t) => sum + t.amount * l2Rel(dd.value) / l2Rel(t.entryDelta), 0)
+    );
+    const l2Cost  = computed(() => S.tranches.reduce((s, t) => s + t.amount, 0));
+    const l2Ret   = computed(() => l2Cost.value ? (l2Value.value / l2Cost.value - 1) * 100 : 0);
+
+    const lotPnl = L => (S.idx - L.entry) * S.cfg.pointValue;
+    const tmfPnl = computed(() => S.tmf.reduce((s, L) => s + lotPnl(L), 0));
+    const tmfMarginTotal = computed(() => S.tmf.reduce((s, L) => s + L.margin, 0));
+    const futuresEquity  = computed(() => tmfMarginTotal.value + tmfPnl.value);
+    const maintPct = computed(() =>
+      S.tmf.length ? futuresEquity.value / (S.cfg.maintMarginPerLot * S.tmf.length) * 100 : 0
+    );
+
+    const totalAsset  = computed(() => l2Value.value + S.us + S.cash + futuresEquity.value);
+    const totalPnlPct = computed(() => (totalAsset.value / S.cfg.totalCapital - 1) * 100);
+
+    const vTurnReady     = computed(() => S.tmf.length > 0 && S.idx >= S.ath - 1e-6);
+    const vaultResetReady = computed(() => totalAsset.value >= S.cfg.totalCapital * 2);
+
+    /* ─────────── 戰略燈號 ─────────── */
     const light = computed(() => {
-      if (delta.value <= -25) return 'red';
-      if (delta.value <= -12) return 'yellow';
-      return 'green';
-    });
-    const lightEmoji = computed(() => ({green:'🟢',yellow:'🟡',red:'🔴'})[light.value]);
-    const lightLabel = computed(() => ({green:'常態牛市',yellow:'預警回檔',red:'極端防守'})[light.value]);
-    const lightTextClass = computed(() => ({green:'text-dn',yellow:'text-warn',red:'text-up'})[light.value]);
-
-    /* 回檔軌道尺：0% ~ -40% 映射為 0~100% 寬度 */
-    const railPos = d => Math.min(100, Math.max(0, (-d) / 40 * 100));
-    const railMarks = [
-      { d:-12, color:'#F5B942', label:'正二補倉 1' },
-      { d:-24, color:'#F5B942', label:'正二補倉 2' },
-      { d:-25, color:'#F6465D', label:'微台扣板機 1' },
-      { d:-35, color:'#F6465D', label:'微台扣板機 2' }
-    ];
-
-    /* ---------- 戰術動作 ---------- */
-    function pushETF(amount, label){
-      st.etfPositions.push({ units: amount / unitNow.value, label, amount });
-    }
-    function stateOf(key, threshold){
-      if (st.actions[key] === 'done') return 'done';
-      return delta.value <= threshold ? 'ready' : 'pending';
-    }
-    const tacticalCards = computed(() => [
-      {
-        key:'buy1', title:'正二補倉 1', threshold:-12,
-        desc:'動用預備金 NT$ 200,000 買入正二 00631L。',
-        state: stateOf('buy1',-12),
-        affordable: st.ledger.cash >= 200000,
-        exec(){ st.ledger.cash -= 200000; pushETF(200000,'補倉1'); st.actions.buy1='done'; }
-      },
-      {
-        key:'buy2', title:'正二補倉 2', threshold:-24,
-        desc:'變現美股 NT$ 250,000 + 現金 NT$ 50,000 買入正二。',
-        state: stateOf('buy2',-24),
-        affordable: st.ledger.us >= 250000 && st.ledger.cash >= 50000,
-        exec(){ st.ledger.us -= 250000; st.ledger.cash -= 50000; pushETF(300000,'補倉2'); st.actions.buy2='done'; }
-      },
-      {
-        key:'tmf1', title:'微台扣板機 1', threshold:-25,
-        desc:`建倉 1 口微台指多單，建倉點 ATH×0.75 ≈ ${Math.round(st.ath*0.75).toLocaleString()}，劃撥保證金 NT$ ${st.settings.tmfMargin.toLocaleString()}。`,
-        state: stateOf('tmf1',-25),
-        affordable: st.ledger.cash >= st.settings.tmfMargin,
-        exec(){
-          st.ledger.cash -= st.settings.tmfMargin;
-          st.ledger.futDeposit += st.settings.tmfMargin;
-          st.micro.push({ entryIndex: st.ath*0.75, lots:1 });
-          st.actions.tmf1='done';
-        }
-      },
-      {
-        key:'tmf2', title:'微台扣板機 2', threshold:-35,
-        desc:`再建倉 1 口微台指，建倉點 ATH×0.65 ≈ ${Math.round(st.ath*0.65).toLocaleString()}，再劃撥保證金 NT$ ${st.settings.tmfMargin.toLocaleString()}。`,
-        state: stateOf('tmf2',-35),
-        affordable: st.ledger.cash >= st.settings.tmfMargin,
-        exec(){
-          st.ledger.cash -= st.settings.tmfMargin;
-          st.ledger.futDeposit += st.settings.tmfMargin;
-          st.micro.push({ entryIndex: st.ath*0.65, lots:1 });
-          st.actions.tmf2='done';
-        }
-      }
-    ]);
-
-    /* ---------- 全域戰報 ---------- */
-    const vTurnAlert = computed(() => microLots.value > 0 && st.current >= st.ath);
-    const vaultAlert = computed(() => totalAssets.value >= st.settings.initCapital*2 && !st.dismissedVault);
-
-    function executeVTurn(){
-      st.ledger.cash += futEquity.value;    // 純現金獲利轉回預備金
-      st.ledger.futDeposit = 0;
-      st.micro = [];
-      st.actions.tmf1 = 'pending';          // 重啟下一輪扣板機
-      st.actions.tmf2 = 'pending';
-    }
-
-    /* ---------- 今日行動指引 ---------- */
-    const guidance = computed(() => {
-      const g = [];
-      const d = delta.value;
-      if (vTurnAlert.value){
-        g.push({icon:'🏁', cls:'text-up font-bold', text:'微台已回本壘：全數平倉止盈，獲利轉回現金。'});
-      }
-      if (light.value==='green'){
-        g.push({icon:'✅', cls:'', text:'常態牛市：持有正二不動，不加碼、不動用預備金。'});
-        g.push({icon:'🚫', cls:'text-mut', text:'不該做：追高加碼、動用微台保證金。'});
-      } else if (light.value==='yellow'){
-        if (st.actions.buy1!=='done') g.push({icon:'⚡', cls:'text-warn font-bold', text:'補倉 1 條件已達：動用 20 萬預備金買正二。'});
-        if (d<=-24 && st.actions.buy2!=='done') g.push({icon:'⚡', cls:'text-warn font-bold', text:'補倉 2 條件已達：變現美股 25 萬 + 現金 5 萬買正二。'});
-        g.push({icon:'🚫', cls:'text-mut', text:'不該做：恐慌賣出正二、提前建微台倉。'});
-      } else {
-        if (st.actions.tmf1!=='done') g.push({icon:'🔴', cls:'text-up font-bold', text:'極端防守：執行微台扣板機 1（ATH×0.75 建倉）。'});
-        if (d<=-35 && st.actions.tmf2!=='done') g.push({icon:'🔴', cls:'text-up font-bold', text:'扣板機 2 已達標：再建 1 口（ATH×0.65）。'});
-        g.push({icon:'🛡️', cls:'', text:'該做：只按劇本執行，保持維持率 > 500%。'});
-        g.push({icon:'🚫', cls:'text-mut', text:'不該做：情緒性砍掉正二、超額加開微台口數。'});
-      }
-      if (vaultAlert.value) g.push({icon:'🏦', cls:'text-warn font-bold', text:'總資產已翻倍：頂部抽離獲利，補齊 30% 現金。'});
-      return g;
+      const d = dd.value;
+      if (d <= -25) return { icon: '🔴', label: '極端防守', chip: 'border-dn/60 bg-dnsoft text-dn',
+        textCls: 'text-dn', glowCls: 'dd-glow-red', borderCls: 'border-dn/60' };
+      if (d <= -12) return { icon: '🟡', label: '預警回檔', chip: 'border-warn/60 bg-warnsoft text-warn',
+        textCls: 'text-warn', glowCls: 'dd-glow-amber', borderCls: 'border-warn/60' };
+      return { icon: '🟢', label: '常態牛市', chip: 'border-up/60 bg-upsoft text-up',
+        textCls: 'text-up', glowCls: 'dd-glow-green', borderCls: 'border-line' };
     });
 
-    /* ---------- 點位 / ATH 操作 ---------- */
-    function applyIndex(){
-      const v = Number(inputIndex.value);
-      if (!v || v <= 0) return;
-      if (v > st.ath){
-        st.uATH *= 1 + (v - st.ath)/st.ath * 2.25;   // ATH 上移：以上漲係數推進單位淨值
-        st.ath = v;
+    /* ─────────── 戰術觸發引擎 ─────────── */
+    const mkState = (hit, done) => done ? '已執行' : hit ? '可執行' : '未達標';
+
+    const triggers = computed(() => {
+      const d = dd.value, c = S.cfg;
+      return [
+        {
+          key: 'buy1', title: '正二補倉 1', threshold: -12, triggerPx: S.ath * 0.88,
+          desc: `動用現金預備金 ${fmtNT(200000)} 買入正二。`,
+          state: mkState(d <= -12, S.flags.buy1),
+          blocked: (!S.flags.buy1 && d <= -12 && S.cash < 200000) ? '現金不足 NT$ 200,000' : '',
+          exec() { S.cash -= 200000; S.tranches.push({ id: Date.now(), label: '補倉1', amount: 200000, entryDelta: d }); S.flags.buy1 = true; },
+          undo() { S.cash += 200000; S.tranches = S.tranches.filter(t => t.label !== '補倉1'); S.flags.buy1 = false; }
+        },
+        {
+          key: 'buy2', title: '正二補倉 2', threshold: -24, triggerPx: S.ath * 0.76,
+          desc: `變現美股 ${fmtNT(250000)} + 現金 ${fmtNT(50000)}，合計 ${fmtNT(300000)} 買入正二。`,
+          state: mkState(d <= -24, S.flags.buy2),
+          blocked: (!S.flags.buy2 && d <= -24 && (S.us < 250000 || S.cash < 50000)) ? '美股或現金餘額不足' : '',
+          exec() { S.us -= 250000; S.cash -= 50000; S.tranches.push({ id: Date.now(), label: '補倉2', amount: 300000, entryDelta: d }); S.flags.buy2 = true; },
+          undo() { S.us += 250000; S.cash += 50000; S.tranches = S.tranches.filter(t => t.label !== '補倉2'); S.flags.buy2 = false; }
+        },
+        {
+          key: 'tmf1', title: '微台第 1 扣板機', threshold: -25, triggerPx: S.ath * 0.75,
+          desc: `建倉 1 口微台指多單 @ ${fmt(S.ath * 0.75)}（ATH×0.75），劃撥保證金 ${fmtNT(c.tmfMargin)}。`,
+          state: mkState(d <= -25, S.flags.tmf1),
+          blocked: (!S.flags.tmf1 && d <= -25 && S.cash < c.tmfMargin) ? `現金不足 ${fmtNT(c.tmfMargin)}` : '',
+          exec() { S.cash -= c.tmfMargin; S.tmf.push({ id: Date.now(), tag: 'tmf1', entry: S.ath * 0.75, margin: c.tmfMargin }); S.flags.tmf1 = true; },
+          undo() { const L = S.tmf.find(x => x.tag === 'tmf1'); if (L) { S.cash += L.margin; S.tmf = S.tmf.filter(x => x !== L); } S.flags.tmf1 = false; }
+        },
+        {
+          key: 'tmf2', title: '微台第 2 扣板機', threshold: -35, triggerPx: S.ath * 0.65,
+          desc: `再建倉 1 口微台指多單 @ ${fmt(S.ath * 0.65)}（ATH×0.65），再劃撥保證金 ${fmtNT(c.tmfMargin)}。`,
+          state: mkState(d <= -35, S.flags.tmf2),
+          blocked: (!S.flags.tmf2 && d <= -35 && S.cash < c.tmfMargin) ? `現金不足 ${fmtNT(c.tmfMargin)}` : '',
+          exec() { S.cash -= c.tmfMargin; S.tmf.push({ id: Date.now(), tag: 'tmf2', entry: S.ath * 0.65, margin: c.tmfMargin }); S.flags.tmf2 = true; },
+          undo() { const L = S.tmf.find(x => x.tag === 'tmf2'); if (L) { S.cash += L.margin; S.tmf = S.tmf.filter(x => x !== L); } S.flags.tmf2 = false; }
+        }
+      ];
+    });
+
+    /* ─────────── 今日行動指引 ─────────── */
+    const todayActions = computed(() => {
+      const d = dd.value, doList = [], dontList = [];
+      const ready = triggers.value.filter(t => t.state === '可執行' && !t.blocked);
+      if (vTurnReady.value) doList.push(`指數回升至 ATH：微台 ${S.tmf.length} 口全數平倉止盈，獲利轉回預備金。`);
+      ready.forEach(t => doList.push(`${t.title}：${t.desc}`));
+      if (vaultResetReady.value) doList.push('總資產已達 2 倍：執行頂部獲利抽離，補齊 30% 現金預備金。');
+
+      if (!doList.length) {
+        if (d > -12) doList.push('持有正二不動，維持紀律，等待訊號。');
+        else if (d > -25) doList.push('補倉已依規執行，其餘資金按兵不動，等待更深回檔或反轉。');
+        else doList.push('防禦部位已就位，耐心持有等待 V 轉，不做多餘操作。');
       }
-      st.current = v;
+      if (d > -12) { dontList.push('不提前動用預備金追高。'); dontList.push('未觸發板機前，不開任何微台部位。'); }
+      else dontList.push('不因恐慌砍出正二現貨；不放大微台口數超過紀律上限（2 口）。');
+      return { do: doList, dont: dontList };
+    });
+
+    /* ─────────── 操作 ─────────── */
+    function applyIndex() {
+      const v = parseFloat(S.idxInput);
+      if (!isFinite(v) || v <= 0) return;
+      S.idx = v;
+      if (v > S.ath) { S.ath = v; S.athDraft = v; }  // 創高自動上修 ATH
     }
-    function editATH(){
-      const v = Number(prompt('手動修正 ATH（歷史最高點）', st.ath));
-      if (!v || v <= 0) return;
-      /* 保持單位淨值連續：修正錨點但不跳動目前市值 */
-      const uNow = st.uATH * F(Math.min(0,(st.current-st.ath)/st.ath*100));
-      st.ath = v;
-      const dNew = Math.min(0,(st.current-st.ath)/st.ath*100);
-      st.uATH = uNow / F(dNew);
-      if (st.current > st.ath) st.ath = st.current;
+    function saveAth() {
+      if (isFinite(S.athDraft) && S.athDraft > 0) { S.ath = S.athDraft; S.athEditing = false; }
     }
-    function resetATH(){
-      if (!confirm('將 ATH 重置為目前點位？')) return;
-      const uNow = st.uATH * F(Math.min(0,(st.current-st.ath)/st.ath*100));
-      st.ath = st.current;
-      st.uATH = uNow;
+    function resetAthToIndex() { S.ath = S.idx; S.athDraft = S.idx; }
+
+    function closeTmfAll() { /* V 轉一鍵平倉：保證金 + 損益全數轉回現金 */
+      S.tmf.forEach(L => { S.cash += L.margin + lotPnl(L); });
+      S.tmf = []; S.flags.tmf1 = false; S.flags.tmf2 = false;
     }
 
-    /* ---------- 系統設定 ---------- */
-    const settingFields = [
-      { key:'initCapital', label:'總初始資本 NT$' },
-      { key:'etfAlloc',    label:'正二 00631L 初始配額 NT$' },
-      { key:'usInit',      label:'美股流動資產 NT$' },
-      { key:'cashInit',    label:'現金 NT$' },
-      { key:'tmfMargin',   label:'微台每口劃撥保證金 NT$' },
-      { key:'maintBase',   label:'微台每口原始保證金（維持率分母）NT$' }
+    function saveSettings() {
+      S.cfgDraft.pollSec = Math.max(10, S.cfgDraft.pollSec || 15);  // 證交所限流保護
+      Object.assign(S.cfg, S.cfgDraft);
+      S.athMode = S.athModeDraft;
+      S.settingsOpen = false;
+    }
+    function resetLedger() {
+      if (!confirm('確定依目前設定重建帳本？將清空補倉與微台狀態。')) return;
+      Object.assign(S.cfg, S.cfgDraft);
+      S.us = S.cfg.usInitial; S.cash = S.cfg.cashInitial;
+      S.tranches = [{ id: 1, label: '初始配置', amount: S.cfg.l2Initial, entryDelta: dd.value }];
+      S.tmf = []; S.flags = { buy1: false, buy2: false, tmf1: false, tmf2: false };
+      S.settingsOpen = false;
+    }
+    function wipeAll() {
+      if (!confirm('確定清除所有本機資料並還原預設值？')) return;
+      localStorage.removeItem(LS_KEY); location.reload();
+    }
+
+    /* ─────────── 格式化 ─────────── */
+    function fmt(n)   { return isFinite(n) ? Math.round(n).toLocaleString('zh-TW') : '—'; }
+    function fmtNT(n) { return 'NT$ ' + fmt(n); }
+
+    /* ═══════════ 即時行情模組 ═══════════
+       資料源 fallback 鏈：
+       1. 證交所基本市況 mis.twse.com.tw（加權指數 tse_t00.tw，約 5 秒延遲）— 無 CORS，需經代理
+       2. Yahoo Finance ^TWII — 無 CORS，需經代理（備援）
+       3. 證交所 OpenAPI FMTQIK（每日收盤）— 官方開放 CORS，可直連（最終備援）
+       注意：CORS 代理為第三方服務，偶爾失效屬正常，會自動換下一個來源。 */
+    const CORS_PROXIES = [
+      u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+      u => 'https://corsproxy.io/?url=' + encodeURIComponent(u)
     ];
-    function saveSettings(reset){
-      Object.assign(st.settings, draft);
-      if (reset){
-        localStorage.removeItem(LS_KEY);
-        Object.assign(st, freshState({ ...draft }));
-        inputIndex.value = st.current;
-        simResult.value = null; activeScenario.value = null;
-      }
-      showSettings.value = false;
+    const MIS_URL   = () => `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0&_=${Date.now()}`;
+    const YAHOO_URL = () => 'https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=1d';
+    const TWSE_DAILY_URL = 'https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK';
+
+    async function httpText(url, ms = 8000) {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), ms);
+      try {
+        const r = await fetch(url, { signal: c.signal });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.text();
+      } finally { clearTimeout(t); }
     }
 
-    /* ---------- 情境模擬器（純函數，不動實盤狀態） ---------- */
+    /* 各來源解析器：回傳 { v: 指數, close: 是否為收盤資料 } */
+    function parseMis(txt) {
+      const j = JSON.parse(txt);
+      const m = j.msgArray && j.msgArray[0];
+      if (!m) throw new Error('mis 無資料');
+      const v = parseFloat(m.z !== '-' && m.z ? m.z : m.y);
+      if (!isFinite(v) || v <= 0) throw new Error('mis 數值無效');
+      return { v, close: false };
+    }
+    function parseYahoo(txt) {
+      const j = JSON.parse(txt);
+      const v = j.chart && j.chart.result && j.chart.result[0].meta.regularMarketPrice;
+      if (!isFinite(v) || v <= 0) throw new Error('yahoo 數值無效');
+      return { v, close: false };
+    }
+    function parseDaily(txt) {
+      const arr = JSON.parse(txt);
+      if (!Array.isArray(arr) || !arr.length) throw new Error('openapi 無資料');
+      const last = arr[arr.length - 1];
+      const v = parseFloat(String(last['發行量加權股價指數'] || '').replace(/,/g, ''));
+      if (!isFinite(v) || v <= 0) throw new Error('openapi 數值無效');
+      return { v, close: true, date: last['日期'] };
+    }
+
+    /* 台北時間與開盤判斷（週一~五 09:00–13:35） */
+    function twNow() { return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' })); }
+    function marketOpen() {
+      const d = twNow(), day = d.getDay();
+      if (day === 0 || day === 6) return false;
+      const m = d.getHours() * 60 + d.getMinutes();
+      return m >= 540 && m <= 815;
+    }
+    const clock = () => twNow().toTimeString().slice(0, 8);
+
+    async function fetchQuote() {
+      if (S.feed.busy) return;
+      S.feed.busy = true;
+      /* 代理鏈：自建 Worker（若已設定）優先，公共代理備援 */
+      const proxies = [];
+      const wu = (S.cfg.workerUrl || '').trim().replace(/\/+$/, '');
+      if (wu) proxies.push({ fn: u => wu + '/?url=' + encodeURIComponent(u), tag: '自建代理' });
+      for (const px of CORS_PROXIES) proxies.push({ fn: px, tag: '公共代理' });
+
+      const attempts = [];
+      for (const p of proxies) attempts.push({ label: `證交所即時（延遲約5秒·${p.tag}）`, get: () => httpText(p.fn(MIS_URL())), parse: parseMis });
+      for (const p of proxies) attempts.push({ label: `Yahoo ^TWII 備援（${p.tag}）`,     get: () => httpText(p.fn(YAHOO_URL())), parse: parseYahoo });
+      attempts.push({ label: '證交所收盤（官方）', get: () => httpText(TWSE_DAILY_URL), parse: parseDaily });
+
+      for (const a of attempts) {
+        try {
+          const r = a.parse(await a.get());
+          applyFetched(r, a.label);
+          S.feed.busy = false;
+          return;
+        } catch (e) { /* 換下一個來源 */ }
+      }
+      S.feed.ok = false;
+      S.feed.msg = `❌ ${clock()} 所有來源抓取失敗（代理可能暫時失效），請手動輸入或稍後再試`;
+      S.feed.busy = false;
+    }
+
+    function applyFetched(r, label) {
+      S.idx = r.v;
+      S.idxInput = String(r.v);
+      /* ATH 上修規則：live 模式即時上修；close 模式僅在收盤資料或非盤中時上修 */
+      const mayRaise = S.athMode === 'live' || r.close || !marketOpen();
+      if (mayRaise && r.v > S.ath) { S.ath = r.v; S.athDraft = r.v; }
+      S.feed.ok = true;
+      const athNote = (!mayRaise && r.v > S.ath) ? '（盤中創高，ATH 待收盤確認）' : '';
+      S.feed.msg = `${label} · ${r.date ? r.date + ' 收盤' : clock() + ' 更新'}${athNote}${S.auto && marketOpen() ? ` · ${S.cfg.pollSec}s 後自動更新` : ''}`;
+    }
+
+    function fetchNow() { fetchQuote(); }
+    function toggleAuto() { S.auto = !S.auto; if (S.auto && marketOpen()) fetchQuote(); }
+
+    /* 輪詢：盤中依 cfg.pollSec 自動抓取；非盤中不輪詢（載入時已抓過收盤價） */
+    let lastAutoFetch = 0;
+    setInterval(() => {
+      if (!S.auto || !marketOpen() || document.hidden) return;
+      const gap = Math.max(10, S.cfg.pollSec || 15) * 1000;
+      if (Date.now() - lastAutoFetch >= gap) { lastAutoFetch = Date.now(); fetchQuote(); }
+    }, 5000);
+
+    /* ─────────── LocalStorage 自動存檔 ─────────── */
+    watch(
+      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, us: S.us, cash: S.cash, tranches: S.tranches, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode }),
+      json => localStorage.setItem(LS_KEY, json)
+    );
+
+    /* ═══════════ 情境模擬器（沙盒，不動實盤帳本） ═══════════ */
     const scenarioDefs = [
-      { key:'bull',  label:'🐂 單邊牛市 +50%',
-        path:[1,1.1,1.2,1.3,1.4,1.5] },
-      { key:'crash', label:'📉 常態股災 -30% + V轉',
-        path:[1,.94,.88,.82,.76,.75,.70,.78,.86,.94,1.0] },
-      { key:'flash', label:'⚡ 極端閃崩 -50% + V轉',
-        path:[1,.88,.76,.75,.68,.65,.58,.50,.62,.75,.88,1.0] },
-      { key:'updown',label:'🎢 先漲 +30% 再回檔 -30%',
-        path:[1,1.1,1.2,1.3,1.3*.94,1.3*.88,1.3*.76,1.3*.75,1.3*.70] }
+      { key: 'bull50',   label: '單邊牛市 +50%',            way: [1.0, 1.50],        note: '單邊牛市中，防禦策略因保留預備金而略遜於滿倉；這是保險成本。' },
+      { key: 'crash30v', label: '常態股災 −30% + V轉',      way: [1.0, 0.70, 1.001], note: '回檔觸發補倉 1/2 與微台第 1 口，V 轉時低接部位與微台獲利放大回升動能。' },
+      { key: 'flash50v', label: '極端閃崩 −50% + V轉',      way: [1.0, 0.50, 1.001], note: '深跌觸發全部板機（受預備金額度限制），微台低點多單在 V 轉中貢獻顯著。' },
+      { key: 'updown',   label: '先漲 +30% 再回檔 −30%',    way: [1.0, 1.30, 0.91],  note: 'ATH 隨創高上修至 +30%，再自新高回檔 −30% 觸發防禦；策略回撤明顯小於滿倉。' }
     ];
 
-    function simulate(pathFractions){
-      const s = st.settings;
-      const base = st.ath;
-      let ath = base, uA = 1;
-      let cash = s.cashInit, us = s.usInit, fut = 0;
-      let positions = [{ units: s.etfAlloc }];
-      let micro = [];
-      const acts = { buy1:false, buy2:false, tmf1:false, tmf2:false };
-      const fullUnits = s.initCapital;   // 滿倉正二對照組（同一單位淨值路徑）
-      const events = [], labels = [], defCurve = [], fullCurve = [];
+    /* 依折點線性內插產生細分路徑（確保板機依序觸發） */
+    function buildPath(way, start, stepsPerLeg = 80) {
+      const path = [];
+      for (let i = 0; i < way.length - 1; i++) {
+        const a = way[i] * start, b = way[i + 1] * start;
+        for (let s = 0; s < stepsPerLeg; s++) path.push(a + (b - a) * s / stepsPerLeg);
+      }
+      path.push(way[way.length - 1] * start);
+      return path;
+    }
 
-      pathFractions.forEach((f, step) => {
-        const idx = base * f;
-        if (idx > ath){ uA *= 1 + (idx-ath)/ath*2.25; ath = idx; }
-        const d = round6((idx - ath)/ath*100);
-        const u = uA * F(Math.min(0,d));
+    function simulate(path, cfg) {
+      /* 正二價格模型：l2AthP = ATH 時點的正二淨值；創高段用 ×2.25、回檔段用 ×1.85 */
+      let ath = path[0], l2AthP = 1.0;
+      let cash = cfg.cashInitial, us = cfg.usInitial;
+      let units = cfg.l2Initial;          // 起始淨值 1.0，units 即為 NT$ 金額
+      let lots = [], f = { b1: 0, b2: 0, t1: 0, t2: 0 };
+      let holdUnits = cfg.totalCapital;   // 滿倉正二對照組
+      const strat = [], hold = [];
 
-        /* 觸發戰術（依現金水位判斷可否執行） */
-        if (d <= -12 && !acts.buy1){
-          if (cash >= 200000){ cash -= 200000; positions.push({units:200000/u}); acts.buy1 = true;
-            events.push(`Δ ${d.toFixed(1)}%｜補倉1：現金 20 萬 → 正二（${Math.round(idx).toLocaleString()}）`); }
-        }
-        if (d <= -24 && !acts.buy2){
-          if (us >= 250000 && cash >= 50000){ us -= 250000; cash -= 50000; positions.push({units:300000/u}); acts.buy2 = true;
-            events.push(`Δ ${d.toFixed(1)}%｜補倉2：美股 25 萬 + 現金 5 萬 → 正二`); }
-        }
-        if (d <= -25 && !acts.tmf1){
-          if (cash >= s.tmfMargin){ cash -= s.tmfMargin; fut += s.tmfMargin;
-            micro.push({ e: ath*0.75 }); acts.tmf1 = true;
-            events.push(`Δ ${d.toFixed(1)}%｜微台第1口建倉 @ ${Math.round(ath*0.75).toLocaleString()}`); }
-          else if (!acts.warn1){ acts.warn1 = true;
-            events.push(`Δ ${d.toFixed(1)}%｜⚠️ 現金不足，微台第1口未建`); }
-        }
-        if (d <= -35 && !acts.tmf2){
-          if (cash >= s.tmfMargin){ cash -= s.tmfMargin; fut += s.tmfMargin;
-            micro.push({ e: ath*0.65 }); acts.tmf2 = true;
-            events.push(`Δ ${d.toFixed(1)}%｜微台第2口建倉 @ ${Math.round(ath*0.65).toLocaleString()}`); }
-          else if (!acts.warn2){ acts.warn2 = true;
-            events.push(`Δ ${d.toFixed(1)}%｜⚠️ 現金不足，微台第2口未建（預備金已耗盡）`); }
-        }
+      for (const p of path) {
+        let l2p;
+        if (p >= ath) { l2AthP *= (1 + 2.25 * (p - ath) / ath); ath = p; l2p = l2AthP; }
+        else l2p = l2AthP * (1 + 1.85 * (p - ath) / ath);
+        const d = (p - ath) / ath * 100;
 
-        /* V 轉止盈：持倉且回到 ATH */
-        let pnl = micro.reduce((a,m)=>a+(idx-m.e)*10,0);
-        if (micro.length && idx >= ath){
-          events.push(`Δ 0.0%｜🏁 V轉止盈：微台全平，獲利 ${Math.round(pnl).toLocaleString()} 轉回現金`);
-          cash += fut + pnl; fut = 0; micro = []; pnl = 0;
-          acts.tmf1 = false; acts.tmf2 = false;
-          acts.warn1 = false; acts.warn2 = false;
+        /* V 轉止盈：回到 ATH 即全平微台 */
+        if (lots.length && p >= ath * 0.9999) {
+          lots.forEach(L => { cash += L.margin + (p - L.entry) * cfg.pointValue; });
+          lots = []; f.t1 = 0; f.t2 = 0;
         }
+        /* 板機（依紀律自動執行，受剩餘資金限制） */
+        if (!f.b1 && d <= -12 && cash >= 200000) { cash -= 200000; units += 200000 / l2p; f.b1 = 1; }
+        if (!f.b2 && d <= -24 && us >= 250000 && cash >= 50000) { us -= 250000; cash -= 50000; units += 300000 / l2p; f.b2 = 1; }
+        if (!f.t1 && d <= -25 && cash >= cfg.tmfMargin) { cash -= cfg.tmfMargin; lots.push({ entry: ath * 0.75, margin: cfg.tmfMargin }); f.t1 = 1; }
+        if (!f.t2 && d <= -35 && cash >= cfg.tmfMargin) { cash -= cfg.tmfMargin; lots.push({ entry: ath * 0.65, margin: cfg.tmfMargin }); f.t2 = 1; }
 
-        const totalDef = positions.reduce((a,p)=>a+p.units,0)*u + cash + us + fut + pnl;
-        labels.push(`${((f-1)*100).toFixed(0)}%`);
-        defCurve.push(Math.round(totalDef));
-        fullCurve.push(Math.round(fullUnits * u));
-      });
-
-      const finalDef = defCurve[defCurve.length-1];
-      const finalFull = fullCurve[fullCurve.length-1];
-      return {
-        finalDef, finalFull, events, labels, defCurve, fullCurve,
-        defPct:  (finalDef  - s.initCapital)/s.initCapital*100,
-        fullPct: (finalFull - s.initCapital)/s.initCapital*100
+        const futEq = lots.reduce((s, L) => s + L.margin + (p - L.entry) * cfg.pointValue, 0);
+        strat.push(units * l2p + us + cash + futEq);
+        hold.push(holdUnits * l2p);
+      }
+      const stat = arr => {
+        let peak = -Infinity, maxDD = 0;
+        arr.forEach(v => { peak = Math.max(peak, v); maxDD = Math.min(maxDD, (v - peak) / peak * 100); });
+        return { final: arr[arr.length - 1], ret: (arr[arr.length - 1] / cfg.totalCapital - 1) * 100, maxDD, series: arr };
       };
+      return { strat: stat(strat), hold: stat(hold) };
     }
 
-    function runScenario(s){
-      activeScenario.value = s.key;
-      simResult.value = simulate(s.path);
-      nextTick(drawSimChart);
+    function runScenario(key) {
+      const def = scenarioDefs.find(s => s.key === key);
+      const start = S.ath || 24000;
+      const path = buildPath(def.way, start);
+      const r = simulate(path, S.cfg);
+      S.scen = {
+        key, label: def.label, note: def.note,
+        strat: r.strat, hold: r.hold,
+        diff: r.strat.final - r.hold.final,
+        labels: path.map(p => Math.round(p))
+      };
+      nextTick(drawScenChart);
     }
 
-    /* ---------- Chart.js ---------- */
-    let allocChart = null, simChart = null;
-    const chartFont = { family:'"JetBrains Mono","Noto Sans TC",monospace', size:11 };
+    /* ─────────── Chart.js ─────────── */
+    let allocChart = null, scenChart = null;
+    Chart.defaults.color = '#7c8ba3';
+    Chart.defaults.font.family = '"JetBrains Mono","Noto Sans TC",monospace';
+    Chart.defaults.borderColor = '#1f2a3c';
 
-    function drawAllocChart(){
+    function drawAllocChart() {
       const ctx = document.getElementById('allocChart');
       if (!ctx) return;
-      const data = [
-        Math.max(0, etfMV.value),
-        Math.max(0, st.ledger.us),
-        Math.max(0, st.ledger.cash),
-        Math.max(0, futEquity.value)
-      ];
-      if (allocChart){
-        allocChart.data.datasets[0].data = data;
-        allocChart.update();
-        return;
-      }
       allocChart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['正二 00631L','美股','現金','期貨保證金'],
+          labels: ['正二 00631L', '美股流動資產', '現金預備金', '期貨專戶'],
           datasets: [{
-            data,
-            backgroundColor: ['#F6465D','#4C8DFF','#2EBD85','#F5B942'],
-            borderColor: '#141A24', borderWidth: 3
+            data: allocData(),
+            backgroundColor: ['#26a69a', '#3b82f6', '#94a3b8', '#f0b90b'],
+            borderColor: '#151d2b', borderWidth: 3, hoverOffset: 6
           }]
         },
         options: {
-          responsive: true, maintainAspectRatio: false, cutout: '62%',
+          responsive: true, maintainAspectRatio: false, cutout: '68%',
           plugins: {
-            legend: { position:'bottom', labels:{ color:'#8A94A6', font:chartFont, boxWidth:10 } },
-            tooltip: { callbacks: { label: c => ` ${c.label}: NT$ ${Math.round(c.raw).toLocaleString()}` } }
+            legend: { position: 'bottom', labels: { boxWidth: 10, padding: 12, font: { size: 11 } } },
+            tooltip: { callbacks: { label: c => ` ${c.label}: NT$ ${Math.round(c.parsed).toLocaleString()}` } }
           }
         }
       });
     }
+    function allocData() {
+      return [Math.max(l2Value.value, 0), Math.max(S.us, 0), Math.max(S.cash, 0), Math.max(futuresEquity.value, 0)];
+    }
+    watch(allocData, v => { if (allocChart) { allocChart.data.datasets[0].data = v; allocChart.update('none'); } });
 
-    function drawSimChart(){
-      const ctx = document.getElementById('simChart');
-      if (!ctx || !simResult.value) return;
-      if (simChart) simChart.destroy();
-      const r = simResult.value;
-      simChart = new Chart(ctx, {
+    function drawScenChart() {
+      const ctx = document.getElementById('scenChart');
+      if (!ctx || !S.scen) return;
+      if (scenChart) scenChart.destroy();
+      scenChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: r.labels,
+          labels: S.scen.labels,
           datasets: [
-            { label:'🛡️ 防禦系統', data:r.defCurve, borderColor:'#4C8DFF',
-              backgroundColor:'rgba(76,141,255,.12)', fill:true, tension:.3, pointRadius:3 },
-            { label:'🚀 滿倉正二', data:r.fullCurve, borderColor:'#8A94A6',
-              borderDash:[6,4], fill:false, tension:.3, pointRadius:3 }
+            { label: '防禦策略', data: S.scen.strat.series, borderColor: '#3b82f6',
+              backgroundColor: '#3b82f622', fill: true, pointRadius: 0, borderWidth: 2, tension: .25 },
+            { label: '滿倉正二', data: S.scen.hold.series, borderColor: '#ef5350',
+              borderDash: [5, 4], pointRadius: 0, borderWidth: 1.5, tension: .25 }
           ]
         },
         options: {
-          responsive:true, maintainAspectRatio:false,
-          scales: {
-            x: { title:{display:true,text:'大盤相對起點漲跌',color:'#8A94A6',font:chartFont},
-                 ticks:{color:'#8A94A6',font:chartFont}, grid:{color:'#252D3D55'} },
-            y: { ticks:{color:'#8A94A6',font:chartFont, callback:v=>(v/10000).toFixed(0)+'萬'}, grid:{color:'#252D3D55'} }
-          },
+          responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { labels:{color:'#E6EAF2',font:chartFont} },
-            tooltip: { callbacks:{ label:c=>` ${c.dataset.label}: NT$ ${c.raw.toLocaleString()}` } }
+            legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: { callbacks: {
+              title: it => `指數 ${Number(it[0].label).toLocaleString()}`,
+              label: c => ` ${c.dataset.label}: NT$ ${Math.round(c.parsed.y).toLocaleString()}`
+            } }
+          },
+          scales: {
+            x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { font: { size: 10 }, callback: v => (v / 10000).toFixed(0) + '萬' } }
           }
         }
       });
     }
 
-    watch([etfMV, futEquity, () => st.ledger.us, () => st.ledger.cash], () => drawAllocChart());
-    onMounted(() => { drawAllocChart(); });
-
-    /* ---------- 工具 ---------- */
-    const fmt = v => 'NT$ ' + Math.round(v).toLocaleString();
+    onMounted(() => {
+      drawAllocChart();
+      if (S.auto) fetchQuote();   // 載入即抓一次（盤中=即時，盤後=收盤價）
+    });
 
     return {
-      st, inputIndex, showSettings, draft, settingFields,
-      delta, etfMV, microLots, microPnL, futEquity, totalAssets, totalPnLPct,
-      maintRate, maintClass,
-      light, lightEmoji, lightLabel, lightTextClass, railPos, railMarks,
-      tacticalCards, vTurnAlert, vaultAlert, executeVTurn, guidance,
-      applyIndex, editATH, resetATH, saveSettings,
-      scenarioDefs, runScenario, simResult, activeScenario,
-      fmt
+      ...toRefs(S),
+      dd, light, triggers, todayActions,
+      l2Value, l2Ret, lotPnl, tmfPnl, tmfMarginTotal, futuresEquity, maintPct,
+      totalAsset, totalPnlPct, vTurnReady, vaultResetReady,
+      applyIndex, saveAth, resetAthToIndex, closeTmfAll,
+      saveSettings, resetLedger, wipeAll,
+      scenarioDefs, runScenario,
+      fetchNow, toggleAuto,
+      fmt, fmtNT
     };
   }
 }).mount('#app');
