@@ -157,11 +157,25 @@ tailwind.config = {
       </button>
     </div>
 
-    <div v-if="vaultResetReady" class="rounded-xl border border-warn bg-warnsoft px-4 py-3 flex items-center gap-3">
-      <div>
-        <div class="font-black text-warn">金庫重置提醒：總資產已達初始資本 2 倍（{{ fmtNT(cfg.totalCapital*2) }}）</div>
-        <div class="text-xs text-mute mt-0.5">建議執行「單向頂部獲利抽離」：僅賣出、不再投入，將獲利抽出補齊至 30% 現金預備金水位。</div>
+    <div v-if="vaultResetReady" class="rounded-xl border-2 border-warn bg-warnsoft px-4 py-3 flex flex-wrap items-center gap-3"
+         style="box-shadow:0 0 24px #f9bc6033">
+      <div class="flex-1 min-w-[260px]">
+        <div class="font-black text-warn">
+          金庫重置提醒：總資產已達階梯里程碑（{{ fmtNT(nextTargetAsset) }} · ×{{ (1 + cfg.milestoneStep * (milestoneLevel + 1)).toFixed(2) }}）
+        </div>
+        <div class="text-xs text-mute mt-1 leading-5">
+          系統建議執行「單向頂部獲利抽離」：賣出
+          <span class="num font-bold text-warn">{{ fmtNT(cfg.extractLo) }} ~ {{ fmtNT(cfg.extractHi) }}</span>
+          之正二部位（建議 <span class="num font-bold">{{ fmtNT(extractPlan.amt) }} ≈ {{ fmt(extractPlan.shares) }} 股 00631L</span>），
+          鎖定勝果並補滿現金池至 {{ fmtNT(cfg.cashVault) }}，確保下一次股災有充足子彈。
+          <span v-if="vaultNeedsExtraction" class="text-dn font-bold">目前現金水位 {{ cashPct.toFixed(1) }}%，低於 {{ cfg.cashFloorPct }}% 下限，強烈建議立即抽離。</span>
+          <span v-else class="text-up">目前現金水位 {{ cashPct.toFixed(1) }}%，尚屬健康，可視獲利狀況酌量抽離。</span>
+        </div>
       </div>
+      <button @click="markVaultReset"
+              class="px-4 py-2 rounded-lg bg-warn text-[#001e1d] font-black hover:brightness-110 transition shrink-0">
+        一鍵標記已抽離 → 升級里程碑 ×{{ (1 + cfg.milestoneStep * (milestoneLevel + 2)).toFixed(2) }}
+      </button>
     </div>
 
     <!-- ═══ 第一排：資金監控（左） + 個股台股/美股（右，上下堆疊） ═══ -->
@@ -538,6 +552,32 @@ tailwind.config = {
             <input v-model.number="cfgDraft.loanMonthly" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
           </label>
         </div>
+        <div class="pt-2 border-t border-line">
+          <div class="text-[11px] text-warn font-bold mb-2">永續動態平衡 · 頂部獲利抽離（金庫重置）</div>
+          <div class="grid grid-cols-2 gap-3">
+            <label class="space-y-1">
+              <span class="text-[11px] text-mute font-bold">里程碑階梯間距（×初始資本）</span>
+              <input v-model.number="cfgDraft.milestoneStep" type="number" step="0.05" min="0.1" max="1" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+            </label>
+            <label class="space-y-1">
+              <span class="text-[11px] text-mute font-bold">理想後備現金池 (NT$)</span>
+              <input v-model.number="cfgDraft.cashVault" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+            </label>
+            <label class="space-y-1">
+              <span class="text-[11px] text-mute font-bold">單次抽離下限 (NT$)</span>
+              <input v-model.number="cfgDraft.extractLo" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+            </label>
+            <label class="space-y-1">
+              <span class="text-[11px] text-mute font-bold">單次抽離上限 (NT$)</span>
+              <input v-model.number="cfgDraft.extractHi" type="number" class="num w-full bg-base border border-line rounded-lg px-3 py-2">
+            </label>
+          </div>
+          <div class="text-[10px] text-mute mt-1 leading-4">
+            已完成里程碑：<span class="num font-bold text-ink">{{ milestoneLevel }}</span> 階 ·
+            下一目標 <span class="num font-bold text-warn">{{ fmtNT(nextTargetAsset) }}</span>。
+            總資產達標時橫幅提示抽離 20~30 萬正二補滿現金池，標記後自動升級下一階。
+          </div>
+        </div>
         <div class="grid grid-cols-2 gap-3">
           <label class="space-y-1">
             <span class="text-[11px] text-mute font-bold">微台每口劃撥保證金 (NT$)</span>
@@ -599,6 +639,11 @@ const DEFAULT_CFG = {
   maintMarginPerLot: 28000,// 每口原始/維持保證金估算基準
   loanBalance:        0,   // 信貸借款總額（負債；初始資本已含此資金，故不重複計入現金）
   loanMonthly:        0,   // 信貸每月應還款額
+  milestoneStep:   0.25,   // 資產里程碑階梯間距（初始資本 ×1.25、×1.50、×1.75…）
+  cashVault:     700000,   // 理想後備現金池水位（NT$，抽離目標：補滿至此）
+  cashFloorPct:      30,   // 理想現金水位下限（% of 總資產，低於此且達里程碑 → 觸發抽離）
+  extractLo:     200000,   // 單次頂部獲利抽離金額下限
+  extractHi:     300000,   // 單次頂部獲利抽離金額上限
   pollSec:           15,   // 盤中自動更新間隔（秒），證交所限流每5秒3次，勿低於10
   workerUrl:         ''    // 自建 Cloudflare Worker 代理網址（選填，設定後優先使用）
 };
@@ -620,6 +665,7 @@ createApp({
       settingsOpen: false,
       /* 現金部位不再手動輸入，改由 computed cash 自動算：總資本 − 各持倉成本 − 微台保證金 + 已實現損益 */
       realizedPnl: 0,              // 微台平倉時的已實現損益累積（V轉全平時入帳）
+      milestoneLevel: 0,           // 已完成的資產里程碑數（0 = 下一目標為 ×(1+step)，每次抽離後 +1）
       /* 微台持倉：entry = 建倉點位，margin = 劃撥保證金 */
       tmf: [],
       flags: { buy1: false, buy2: false, tmf1: false, tmf2: false },
@@ -654,6 +700,7 @@ createApp({
         S.ath = saved.ath; S.idx = saved.idx; S.idxInput = String(saved.idx);
         S.tmf = saved.tmf || [];
         if (typeof saved.realizedPnl === 'number') S.realizedPnl = saved.realizedPnl;
+        if (typeof saved.milestoneLevel === 'number') S.milestoneLevel = saved.milestoneLevel;
         Object.assign(S.flags, saved.flags || {});
         if (typeof saved.auto === 'boolean') S.auto = saved.auto;
         if (saved.athMode) { S.athMode = saved.athMode; S.athModeDraft = saved.athMode; }
@@ -777,7 +824,37 @@ createApp({
     const leverage = computed(() => netWorth.value > 0 ? totalExposure.value / netWorth.value : 0);
 
     const vTurnReady     = computed(() => S.tmf.length > 0 && S.idx >= S.ath - 1e-6);
-    const vaultResetReady = computed(() => totalAsset.value >= S.cfg.totalCapital * 2);
+
+    /* ═══════════ 永續動態平衡（Perpetual Loop）：階梯里程碑 + 頂部獲利抽離 ═══════════ */
+    /* 下一個資產里程碑 = 初始資本 × (1 + step × (已完成里程碑數 + 1))
+       例：step=0.25 → ×1.25、×1.50、×1.75、×2.00… 每次「標記已抽離」自動升級到下一階 */
+    const nextTargetAsset = computed(() =>
+      S.cfg.totalCapital * (1 + S.cfg.milestoneStep * (S.milestoneLevel + 1))
+    );
+    /* 現金水位（% of 總資產） */
+    const cashPct = computed(() => totalAsset.value > 0 ? cash.value / totalAsset.value * 100 : 0);
+    /* 里程碑達標（橫幅亮起）：總資產 ≥ 下一目標線 */
+    const milestoneHit = computed(() => S.cfg.totalCapital > 0 && totalAsset.value >= nextTargetAsset.value);
+    /* 抽離觸發（強提示）：達標 且 現金水位低於理想下限 → 需要抽離補血 */
+    const vaultResetReady = computed(() => milestoneHit.value);
+    const vaultNeedsExtraction = computed(() => milestoneHit.value && cashPct.value < S.cfg.cashFloorPct);
+
+    /* 抽離計畫：建議賣出金額（20~30 萬區間，以補滿 cashVault 為目標估算）與對應正二股數 */
+    const extractPlan = computed(() => {
+      const gap = Math.max(S.cfg.cashVault - cash.value, 0);              // 距離理想現金池的缺口
+      const amt = Math.min(Math.max(gap, S.cfg.extractLo), S.cfg.extractHi); // 夾在 20~30 萬區間
+      const price = S.stocks.some(s => s.ticker === L2_TICKER && s.ok)
+        ? S.stocks.find(s => s.ticker === L2_TICKER && s.ok).livePrice
+        : (l2SharesTotal.value ? l2Cost.value / l2SharesTotal.value : 0);
+      const shares = price > 0 ? Math.floor(amt / price) : 0;
+      return { amt: Math.round(amt), shares, price };
+    });
+
+    /* 一鍵標記已抽離／金庫重置：升級下一個里程碑（實際賣出由使用者在券商執行後，
+       至下方台股持倉手動調整 00631L 股數；本鍵只負責推進目標線與記錄） */
+    function markVaultReset() {
+      S.milestoneLevel += 1;
+    }
 
     /* ─────────── 戰略燈號 ─────────── */
     const light = computed(() => {
@@ -839,17 +916,36 @@ createApp({
     const todayActions = computed(() => {
       const d = dd.value, doList = [], dontList = [];
       const ready = triggers.value.filter(t => t.state === '可執行' && !t.blocked);
-      if (vTurnReady.value) doList.push(`指數回升至 ATH：微台 ${S.tmf.length} 口全數平倉止盈，獲利轉回預備金。`);
+
+      /* ── 創高側（Δ% ≥ 0 或已達里程碑）：獲利抽離與紀律 ── */
+      if (vTurnReady.value) doList.push(`指數回升至 ATH：微台 ${S.tmf.length} 口全數平倉止盈（結算獲利、釋放保證金），轉回預備金。`);
+      if (vaultResetReady.value) {
+        doList.push(`資產達里程碑 ${fmtNT(nextTargetAsset.value)}：執行頂部獲利抽離，賣出約 ${fmtNT(extractPlan.value.amt)}（≈ ${fmt(extractPlan.value.shares)} 股正二）補滿現金池至 ${fmtNT(S.cfg.cashVault)}。`);
+        if (usStocksValueTWD.value > 0 && usStocksRet.value > 15) doList.push('美股部位獲利豐厚：可酌量部分出脫換回 TWD，一併補充現金池。');
+      }
+      if (d >= 0 && !vaultResetReady.value) doList.push(`大盤創高中：檢視資產里程碑（下一目標 ${fmtNT(nextTargetAsset.value)}），保持現金池 ${S.cfg.cashFloorPct}% 以上。`);
+
+      /* ── 回檔側：SOP 板機有序執行 ── */
       ready.forEach(t => doList.push(`${t.title}：${t.desc}`));
-      if (vaultResetReady.value) doList.push('總資產已達 2 倍：執行頂部獲利抽離，補齊 30% 現金預備金。');
 
       if (!doList.length) {
         if (d > -12) doList.push('持有正二不動，維持紀律，等待訊號。');
         else if (d > -25) doList.push('補倉已依規執行，其餘資金按兵不動，等待更深回檔或反轉。');
         else doList.push('防禦部位已就位，耐心持有等待 V 轉，不做多餘操作。');
       }
-      if (d > -12) { dontList.push('不提前動用預備金追高。'); dontList.push('未觸發板機前，不開任何微台部位。'); }
-      else dontList.push('不因恐慌砍出正二現貨；不放大微台口數超過紀律上限（2 口）。');
+
+      /* ── 不該做 ── */
+      if (d >= 0 || vaultResetReady.value) {
+        dontList.push('嚴禁繼續追高加碼正二。');
+        dontList.push('嚴禁在大盤創高時留存微台多單（先止盈釋放保證金）。');
+        dontList.push('嚴禁將現金池全數轉入股票，永遠保留下一次股災的子彈。');
+      } else if (d > -12) {
+        dontList.push('不提前動用預備金追高。');
+        dontList.push('未觸發板機前，不開任何微台部位。');
+      } else {
+        dontList.push('按 SOP 板機有序分批補正二／劃撥微台保證金，嚴禁一次性全倉投盡。');
+        dontList.push('不因恐慌砍出正二現貨；不放大微台口數超過紀律上限（2 口）。');
+      }
       return { do: doList, dont: dontList };
     });
 
@@ -876,6 +972,7 @@ createApp({
       if (!confirm('確定依目前設定重建帳本？將清空板機補倉與微台狀態（不影響你手動新增的個股/美股持倉）。')) return;
       Object.assign(S.cfg, S.cfgDraft);
       S.realizedPnl = 0;
+      S.milestoneLevel = 0;
       /* 清掉板機自動補倉的 00631L（name 含「補倉」），保留手動持倉 */
       S.stocks = S.stocks.filter(s => !(s.name || '').includes('補倉'));
       S.tmf = []; S.flags = { buy1: false, buy2: false, tmf1: false, tmf2: false };
@@ -1090,7 +1187,7 @@ createApp({
 
     /* ─────────── LocalStorage 自動存檔 ─────────── */
     watch(
-      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, realizedPnl: S.realizedPnl, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode, stocks: S.stocks, usStocks: S.usStocks }),
+      () => JSON.stringify({ cfg: S.cfg, ath: S.ath, idx: S.idx, realizedPnl: S.realizedPnl, milestoneLevel: S.milestoneLevel, tmf: S.tmf, flags: S.flags, auto: S.auto, athMode: S.athMode, stocks: S.stocks, usStocks: S.usStocks }),
       json => localStorage.setItem(LS_KEY, json)
     );
 
@@ -1119,6 +1216,10 @@ createApp({
       let units = cfg.totalCapital * 0.65;  // 起始正二部位成本（沙盒獨立推演，約總資本 65%，不影響實盤帳本）
       let cash = cfg.totalCapital - units;          // 現金 = 總資本 − 初始正二成本（與實盤同一套推導邏輯）
       let lots = [], f = { b1: 0, b2: 0, t1: 0, t2: 0 };
+      let milestone = 1;                    // 永續迴圈：下一個抽離里程碑 = totalCapital × (1 + step × milestone)
+      const mStep = cfg.milestoneStep || 0.25;
+      const exLo = cfg.extractLo || 200000, exHi = cfg.extractHi || 300000;
+      const cashFloor = (cfg.cashFloorPct || 30) / 100;
       let holdUnits = cfg.totalCapital;   // 滿倉正二對照組
       const strat = [], hold = [];
 
@@ -1133,6 +1234,24 @@ createApp({
           lots.forEach(L => { cash += L.margin + (p - L.entry) * cfg.pointValue; });
           lots = []; f.t1 = 0; f.t2 = 0;
         }
+
+        /* ═══ 頂部獲利抽離與金庫重置（Perpetual Loop 上行引擎）═══
+           創高段：資產達階梯里程碑且現金水位偏低 → 賣出 20~30 萬正二轉現金，里程碑升級。
+           板機旗標同步重置（b1/b2 歸零），讓下一輪回檔的補倉板機重新武裝 —— 低買高賣永續循環。 */
+        if (p >= ath * 0.9999) {
+          const futEqNow = lots.reduce((s, L) => s + L.margin + (p - L.entry) * cfg.pointValue, 0);
+          const assetNow = units * l2p + cash + futEqNow;
+          const target = cfg.totalCapital * (1 + mStep * milestone);
+          if (assetNow >= target && cash < assetNow * cashFloor && units * l2p > exLo) {
+            const gap = Math.max(assetNow * cashFloor - cash, 0);
+            const amt = Math.min(Math.max(gap, exLo), exHi, units * l2p);  // 夾 20~30 萬且不超過持倉市值
+            units -= amt / l2p;
+            cash += amt;
+            milestone += 1;
+            f.b1 = 0; f.b2 = 0;   // 重新武裝補倉板機：抽離出的現金將在下一輪回檔低價買回更多單位
+          }
+        }
+
         /* 板機（依紀律自動執行，受剩餘資金限制；補倉2 已改為全額現金來源） */
         if (!f.b1 && d <= -12 && cash >= 200000) { cash -= 200000; units += 200000 / l2p; f.b1 = 1; }
         if (!f.b2 && d <= -24 && cash >= 300000) { cash -= 300000; units += 300000 / l2p; f.b2 = 1; }
@@ -1252,6 +1371,7 @@ createApp({
       usStockPnlTWD, usStockPnlPct, usStocksValueTWD, usStocksRet, addUsStock, removeUsStock,
       combinedStocksRet,
       totalAsset, totalPnlPct, netWorth, totalExposure, leverage, vTurnReady, vaultResetReady,
+      nextTargetAsset, cashPct, vaultNeedsExtraction, extractPlan, markVaultReset,
       applyIndex, closeTmfAll,
       saveSettings, resetLedger, wipeAll,
       scenarioDefs, runScenario,
